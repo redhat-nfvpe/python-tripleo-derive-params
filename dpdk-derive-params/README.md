@@ -6,11 +6,12 @@ DPDK NIC’s info, num_phy_cores_per_numa_node_for_pmd and
 huge_page_allocation_percentage.
 
 We can derive DPDK parameters for any role which uses DPDK feature, but need
-to run derive params python scripts for each role separately with matching
-node UUID and other inputs.
+to run derive params python scripts for each role separately with associated
+flavor and other inputs.
 
 The following is the list of parameters can be derived automatically for
-DPDK feature based on introspection hardware data of provided node.
+DPDK feature based on introspection hardware data of first baremetal node
+which is matching the provided flavor.
 
 ```
 NeutronDpdkCoreList
@@ -48,35 +49,14 @@ network-environment.yaml file.
   environment to deploy overcloud nodes.
 * Capture the list of roles with associated node uuid which are using OVS-DPDK
   feature to derive the DPDK parameters.
-  #### Steps to get node UUID for any role:
-   1. Find flavor name referring the property Overcloud[RoleName]Flavor value in
-      network-environment.yaml file.
-      ```
-      OvercloudControlFlavor: control
-      OvercloudComputeOvsDpdkFlavor: computeovsdpdk
-      ```
-   1. Find profile name for the flavor name
-      ```
-      openstack flavor show [flavor-name]
-      ```
-      Lists the properties associated for flavor and also comma-separated,
-      where capabilities:profile property value is the associated profile for
-      the flavor name.
-
-      ```
-      capabilities:boot_option='local', capabilities:profile='computeovsdpdk', cpu_arch='x86_64'
-      ```
-      here 'computeovsdpdk' is the profile name
-
-   1. Find node UUID using profile name
-      ```
-      openstack overcloud profiles list
-      ```
-      Lists the node UUID and associated profile name for all the available
-      baremetal nodes.
-      Capture the first node matching required profile name for that role to
-      run the DPDK derive params scripts.
-* Capture the list of DPDK NIC's name with MTU based on hardware spec.
+  Find flavor name referring the property Overcloud[RoleName]Flavor value in
+  network-environment.yaml file for any role.
+  ```
+  OvercloudControlFlavor: control
+  OvercloudComputeOvsDpdkFlavor: computeovsdpdk
+  ```
+* Capture the list of DPDK NIC's (NIC numbering like nic1, nic2 ...) with MTU
+  based on hardware spec.
 
 ## Parameters Default Value
 * NovaReservedHostMemory parameter is 4096.
@@ -86,10 +66,10 @@ Based on the environment, operator can update the default value when copying.
 
 ## User Inputs
 
-#### node_uuid:
-This input parameter specifies UUID of the node is used to identify the
-baremetal node and DPDK parameters are derived based on that node
-hardware data.
+#### flavor:                                                                    
+This input parameter specifies the flavor name associated to the role to        
+identify the first baremetal node and DPDK parameters are derived based on      
+that node hardware data. 
 
 #### dpdk_nics_info:
 This input parameter specifies the list of dpdk nics with MTU.
@@ -113,7 +93,7 @@ set to 50.
 $ python dpdk_derive_params.py user_inputs.json
 user_inputs.json format:
 {
-"node_uuid": "Baremetal node UUID",
+"flavor": "flavor name",
 "dpdk_nics": [{"nic": "nic_name", "mtu": MTU}],
 "num_phy_cores_per_numa_node_for_pmd": 1,
 "huge_page_allocation_percentage": 50
@@ -123,19 +103,21 @@ user_inputs.json format:
 ## Example
 
 ```
-$ python dpdk_derive_params.py '{"node_uuid": "89c50fce-d6ac-4027-ba54-7ee222b946df",
-"dpdk_nics": [{"nic": "enp132s0f0", "mtu": 1500}],
-"num_phy_cores_per_numa_node_for_pmd": 1, "huge_page_allocation_percentage": 50}'
+$  python dpdk_derive_params.py '{"flavor": "compute", "dpdk_nics": [{"nic": "nic1", "mtu": 1500}], "num_phy_cores_per_numa_node_for_pmd": 1, "huge_page_allocation_percentage": 50}'
 Validating user inputs..
-{"huge_page_allocation_percentage": 50, "node_uuid": "89c50fce-d6ac-4027-ba54-7ee222b946df",
-"num_phy_cores_per_numa_node_for_pmd": 1, "dpdk_nics": [{"nic": "enp132s0f0", "mtu": 1500}]}
-Deriving DPDK parameters based on node: 89c50fce-d6ac-4027-ba54-7ee222b946df
-ComputeKernelArgs: intel_iommu=on default_hugepagesz=1GB hugepagesz=1G hugepages=126
-HostCpusList: 0-1,44-45
-HostIsolatedCoreList: 2-43,46-87
-NeutronDpdkCoreList: 33,40,77,84
-NeutronDpdkMemoryChannels: 4
-NeutronDpdkSocketMemory: 2048,2048
-NovaReservedHostMemory: 4096
-NovaVcpuPinSet: 2-32,34-39,41-43,46-76,78-83,85-87
+{"flavor": "compute", "huge_page_allocation_percentage": 50, "num_phy_cores_per_numa_node_for_pmd": 1, "dpdk_nics": [{"nic": "nic1", "mtu": 1500}]}
+Deriving DPDK parameters based on flavor: compute
+NovaReservedHostMemory: "4096"
+NeutronDpdkCoreList: "'40,84,33,77'"
+ComputeKernelArgs: "default_hugepagesz=1GB hugepagesz=1G hugepages=126 intel_iommu=on"
+NovaVcpuPinSet: ['2-32','34-39','41-43','46-76','78-83','85-87']
+HostIsolatedCoreList: "2-43,46-87"
+NeutronDpdkMemoryChannels: "4"
+NeutronDpdkSocketMemory: "'2048,2048'"
+HostCpusList: "'0,44,1,45'"
 ```
+
+## Note
+
+This python scripts can also be used to derive the parameters automatically when
+any role uses both DPDK and SRIOV features.

@@ -1,15 +1,101 @@
 import json
 import math
+import re
 import subprocess
 import sys
 import yaml
 
+# Gets the profile name for flavor name
+def get_profile_name(flavor_name):
+    cmd = "openstack flavor show " + flavor_name
+    output = subprocess.check_output(cmd,shell=True)
+    properties = ''
+    for line in output.split('\n'):
+        if 'properties' in line:
+            properties = line
+    profile = ''
+    if properties:
+        profile_index = properties.index('capabilities:profile=')
+        if profile_index >=0:
+            profile_start_index = profile_index + len('capabilities:profile=') + 1
+            profile_end_index = properties.index('\'', profile_start_index, len(properties))
+            profile = properties[profile_start_index:profile_end_index]
+    return profile
+
+
+# Gets the first matching node UUID for flavor name
+def get_node_uuid(flavor_name):
+    node_uuid = ''
+    profile_name = get_profile_name(flavor_name)
+    cmd = "openstack overcloud profiles list"
+    output = subprocess.check_output(cmd,shell=True)
+    lines = output.split('\n')
+    heading_list = lines[1].split('|')
+    for heading in heading_list:
+        if 'Node UUID' in heading:
+            node_uuid_index = heading_list.index(heading)
+        if 'Current Profile' in heading:
+            current_profile_index = heading_list.index(heading)
+    for line in lines[2:len(lines)]:
+        column_list = line.split('|')
+        if len(column_list) > 1:
+            if column_list[current_profile_index].strip() == profile_name:
+                node_uuid = column_list[node_uuid_index]
+    return node_uuid.strip()
+
+
 # Gets the hardware data for the give node UUID
-def get_introspection_data(node_uuid):
+def get_introspection_data(flavor_name):
+    node_uuid = get_node_uuid(flavor_name)
     cmd = "openstack baremetal introspection data save " + node_uuid
     output = subprocess.check_output(cmd,shell=True)
     hw_data = json.loads(output)
     return hw_data
+
+
+def natural_sort_key(s):
+    nsre = re.compile('([0-9]+)')
+    return [int(text) if text.isdigit() else text
+            for text in re.split(nsre, s)]
+
+
+def is_embedded_nic(nic):
+    if (nic.startswith('em') or nic.startswith('eth') or
+        nic.startswith('eno')):
+        return True
+    return False
+
+
+# Sorting the NIC's like os-net-config logic
+def ordered_nics(interfaces):
+    embedded_nics = []
+    nics = []
+    for iface in interfaces:
+        nic = iface.get('name', '')
+        if is_embedded_nic(nic):
+             embedded_nics.append(nic)
+        else:
+            nics.append(nic)
+    active_nics = (sorted(
+        embedded_nics, key=natural_sort_key) +
+        sorted(nics, key=natural_sort_key))
+    return active_nics
+
+# Gets the ordered active interfaces list
+def get_interfaces_list(hw_data):
+    interfaces = hw_data.get('inventory', {}).get('interfaces', [])
+    # Checks whether inventory interfaces information is not available
+    # in introspection data.
+    if not interfaces:
+        msg = 'Introspection data does not have inventory.interfaces'
+        raise Exception(msg)
+    active_interfaces = [iface for iface in interfaces
+                         if iface.get('has_carrier', False)]
+    # Checks whether active interfaces are not available
+    if not active_interfaces:
+        msg = 'Unable to determine active interfaces (has_carrier)'
+        return Exception(msg)    
+    return ordered_nics(active_interfaces)
 
 
 # Gets the DPDK PMD core list
@@ -26,7 +112,6 @@ def get_dpdk_core_list(hw_data, dpdk_nics_numa_info,
     if not nics:
        raise Exception('Introspection data does not '
                        'have numa_topology.nics')
-
     numa_cores = {}
     if not cpus:
        raise Exception('Introspection data does not '
@@ -144,7 +229,7 @@ def get_dpdk_socket_memory(hw_data, dpdk_nics_numa_info,
             minimum_socket_memory)
         dpdk_socket_memory_list.append(socket_mem)
 
-    return ','.join([str(sm) for sm in dpdk_socket_memory_list])
+    return "\'"+','.join([str(sm) for sm in dpdk_socket_memory_list])+"\'"
 
 
 # Gets nova cpus
@@ -171,16 +256,28 @@ def get_host_isolated_cpus_list(dpdk_cpus, nova_cpus):
     return ','.join([str(thread) for thread in host_isolated_cpus_list])
 
 
+def get_physical_iface_name(ordered_nics, nic_name):
+    if nic_name.startswith('nic'):
+         # Nic numbering, find the actual interface name
+         nic_number = int(nic_name.replace('nic', ''))
+         if nic_number > 0:
+             iface_name = ordered_nics[nic_number - 1]
+             return iface_name
+    return nic_name
+
+
 # Gets NUMA info like NIC name, node and MTU for DPDK NICs
-def get_dpdk_nics_numa_info(hw_data, dpdk_nics_info):
+def get_dpdk_nics_numa_info(hw_data, ordered_nics, dpdk_nics_info):
     dpdk_nics_numa_info = []
     nics = hw_data.get('numa_topology', {}).get('nics', [])
     for dpdk_nic in dpdk_nics_info:
         valid_dpdk_nic = False
         for nic in nics:
-            if dpdk_nic['nic'] == nic['name']:
+            phy_nic_name = get_physical_iface_name(ordered_nics,
+                                                   dpdk_nic['nic'])
+            if phy_nic_name == nic['name']:
                 valid_dpdk_nic = True
-                dpdk_nic_info = {'name': dpdk_nic['nic'],
+                dpdk_nic_info = {'name': phy_nic_name,
                                  'numa_node': nic['numa_node'],
                                  'mtu': dpdk_nic['mtu']}
                 dpdk_nics_numa_info.append(dpdk_nic_info);
@@ -210,10 +307,10 @@ def get_kernel_args(hw_data, hugepage_alloc_perc):
     iommu_info = ''
     cpu_model = hw_data.get('inventory', {}).get('cpu', '').get('model_name', '')
     if cpu_model.startswith('Intel'):
-        iommu_info = 'intel_iommu=on '
-    kernel_args = iommu_info
-    kernel_args += ('default_hugepagesz=1GB hugepagesz=1G '
+        iommu_info = ' intel_iommu=on'
+    kernel_args = ('default_hugepagesz=1GB hugepagesz=1G '
                    'hugepages=%(hugepages)d' % {'hugepages': hugepages})
+    kernel_args += iommu_info
     return kernel_args
 
 
@@ -224,7 +321,7 @@ def is_supported_default_hugepages(hw_data):
 
 
 # Converts number format cpus into range format
-def convert_number_to_range_list(num_list):
+def convert_number_to_range_list(num_list, array_format = False):
     num_list = [int(num.strip(' '))
                 for num in num_list.split(",")]
     num_list.sort()
@@ -241,15 +338,18 @@ def convert_number_to_range_list(num_list):
             if next_index < len(num_list):
                 range_min = num_list[next_index]
 
-    return ','.join(range_list)
+    if array_format:
+        return '['+','.join([("\'"+thread+"\'") for thread in range_list])+']'
+    else:
+        return ','.join(range_list)
 
 
 # Validates the user inputs
 def vaildate_user_input(user_input):
     print(json.dumps(user_input))
 
-    if not 'node_uuid' in user_input.keys():
-        raise Exception("node UUID is missing in user input!");
+    if not 'flavor' in user_input.keys():
+        raise Exception("Flavor is missing in user input!");
 
     if not 'dpdk_nics' in user_input.keys():
         raise Exception("DPDK NIC's and MTU info are missing in user input!");
@@ -257,7 +357,7 @@ def vaildate_user_input(user_input):
         raise Exception("DPDK NIC's and MTU info is invalid!")
 
     for key in user_input.keys():
-        if not key in ['node_uuid', 'dpdk_nics',
+        if not key in ['flavor', 'dpdk_nics',
                        'num_phy_cores_per_numa_node_for_pmd',
                        'huge_page_allocation_percentage']:
             raise Exception("Invalid user input '%(key)s'" % {'key': key})
@@ -281,9 +381,11 @@ if __name__ == '__main__':
             "huge_page_allocation_percentage", 50)
 
         print("Deriving DPDK parameters based on "
-              "node: %s" % user_input['node_uuid'])
-        hw_data = get_introspection_data(user_input['node_uuid'])
-        dpdk_nics_info = get_dpdk_nics_numa_info(hw_data, user_input['dpdk_nics'])
+              "flavor: %s" % user_input['flavor'])
+        hw_data = get_introspection_data(user_input['flavor'])
+        ordered_nics = get_interfaces_list(hw_data)
+        dpdk_nics_info = get_dpdk_nics_numa_info(hw_data, ordered_nics,
+                                                 user_input['dpdk_nics'])
         dpdk_cpus = get_dpdk_core_list(hw_data, dpdk_nics_info,
                                        dpdk_nic_numa_cores_count) 
         host_cpus = get_host_cpus_list(hw_data)
@@ -294,15 +396,19 @@ if __name__ == '__main__':
         host_mem = 4096
         isol_cpus = convert_number_to_range_list(isol_cpus)
         kernel_args = get_kernel_args(hw_data, hugepage_alloc_perc)
-        parameters['NeutronDpdkCoreList'] = convert_number_to_range_list(dpdk_cpus)
-        parameters['HostCpusList'] = convert_number_to_range_list(host_cpus)
+        parameters['NeutronDpdkCoreList'] = ("\'%(dpdk_cpus)s\'" % {"dpdk_cpus": dpdk_cpus})
+        parameters['HostCpusList'] = ("\'%(host_cpus)s\'" % {"host_cpus": host_cpus})
         parameters['NeutronDpdkSocketMemory'] = dpdk_socket_memory
         parameters['NeutronDpdkMemoryChannels'] = mem_channels
-        parameters['NovaVcpuPinSet'] = convert_number_to_range_list(nova_cpus)
+        parameters['NovaVcpuPinSet'] = convert_number_to_range_list(nova_cpus, True)
         parameters['NovaReservedHostMemory'] = host_mem
         parameters['HostIsolatedCoreList'] = isol_cpus
         parameters['ComputeKernelArgs'] = kernel_args
         # prints the derived DPDK parameters
-        print(yaml.safe_dump(parameters, default_flow_style=False))
+        for key, val in parameters.items():
+            if key == "NovaVcpuPinSet":
+                print('%(key)s: %(val)s' % {"key": key, "val": val})
+            else:
+                print('%(key)s: \"%(val)s\"' % {"key": key, "val": val})
     except Exception as exc:
         print("Error: %s" % exc)

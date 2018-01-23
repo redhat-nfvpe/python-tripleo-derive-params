@@ -1,15 +1,16 @@
 # OSP10 SRIOV Derive Parameters
 
 Python scripts ‘sriov_derive_params.py’ is used to auto generate the
-SRIOV parameters based on the baremetal node using the user inputs UUID and
+SRIOV parameters based on the baremetal node using the user inputs flavor and
 huge_page_allocation_percentage.
 
 We can derive SRIOV parameters for any role which uses SRIOV feature, but
 need to run derive params python scripts for each role separately with
-matching node UUID and huge_page_allocation_percentage.
+associated flavor and huge_page_allocation_percentage.
 
 The following is the list of parameters can be derived automatically for
-SRIOV feature based on introspection hardware data of provided node.
+SRIOV feature based on introspection hardware data of first baremetal node
+which is matching the provided flavor.
 
 ```
 NovaReservedHostMemory
@@ -41,36 +42,14 @@ network-environment.yaml file.
   ```
 * Tripleo-heat-templates should be copied and updated in the undercloud
   environment to deploy overcloud nodes.
-* Capture the list of roles with associated node uuid which are using SRIOV
+* Capture the list of roles with associated flavor name which are using SRIOV
   feature to derive the DPDK parameters.
-  #### Steps to get node UUID for any role:
-   1. Find flavor name referring the property Overcloud[RoleName]Flavor value in
-      network-environment.yaml file.
-      ```
-      OvercloudControlFlavor: control
-      OvercloudComputeSriovFlavor: computeovsdpdk
-      ```
-   1. Find profile name for the flavor name
-      ```
-      openstack flavor show [flavor-name]
-      ```
-      Lists the properties associated for flavor and also comma-separated,
-      where capabilities:profile property value is the associated profile for
-      the flavor name.
-
-      ```
-      capabilities:boot_option='local', capabilities:profile='computesriov', cpu_arch='x86_64'
-      ```
-      here 'computesriov' is the profile name
-
-   1. Find node UUID using profile name
-      ```
-      openstack overcloud profiles list
-      ```
-      Lists the node UUID and associated profile name for all the available
-      baremetal nodes.
-      Capture the first node matching required profile name for that role to
-      run the SRIOV derive params scripts.
+  Find flavor name referring the property Overcloud[RoleName]Flavor value in
+  network-environment.yaml file for any role.
+  ```
+  OvercloudControlFlavor: control
+  OvercloudComputeSriovFlavor: computeovsdpdk
+  ```
 
 ## Parameters Default Value
 * NovaReservedHostMemory parameter is 4096.
@@ -79,10 +58,10 @@ Based on the environment, operator can update the default value when copying.
 
 ## User Inputs
 
-#### node_uuid:
-This input parameter specifies UUID of the node is used to identify the
-baremetal node and DPDK parameters are derived based on that node
-hardware data.
+#### flavor:
+This input parameter specifies the flavor name associated to the role to
+identify the first baremetal node and SRIOV parameters are derived based on
+that node hardware data.
 
 #### huge_page_allocation_percentage:
 This input parameter specifies the required percentage of total memory
@@ -97,7 +76,7 @@ set to 50.
 $ python sriov_derive_params.py user_inputs.json
 user_inputs.json format:
 {
-"node_uuid": "Baremetal node UUID",
+"flavor": "flavor name",
 "huge_page_allocation_percentage": 50
 }
 ```
@@ -105,12 +84,12 @@ user_inputs.json format:
 ## Example
 
 ```
-$ python sriov_derive_params.py '{"node_uuid": "89c50fce-d6ac-4027-ba54-7ee222b946df",
-"huge_page_allocation_percentage":50}'Validating user inputs..
-{"huge_page_allocation_percentage": 50, "node_uuid": "89c50fce-d6ac-4027-ba54-7ee222b946df"}
-Deriving SRIOV parameters based on node: 89c50fce-d6ac-4027-ba54-7ee222b946df
-ComputeKernelArgs: intel_iommu=on default_hugepagesz=1GB hugepagesz=1G hugepages=126
-HostIsolatedCoreList: 2-43,46-87
-NovaReservedHostMemory: 4096
-NovaVcpuPinSet: 2-43,46-87
+$  python sriov_derive_params.py '{"flavor": "compute", "huge_page_allocation_percentage": 50}'
+Validating user inputs..
+{"flavor": "compute", "huge_page_allocation_percentage": 50}
+Deriving SRIOV parameters based on flavor: compute
+ComputeKernelArgs: "default_hugepagesz=1GB hugepagesz=1G hugepages=126 intel_iommu=on"
+NovaVcpuPinSet: ['2-43','46-87']
+NovaReservedHostMemory: "4096"
+HostIsolatedCoreList: "2-43,46-87"
 ```
