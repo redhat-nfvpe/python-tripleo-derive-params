@@ -277,7 +277,8 @@ def get_dpdk_nics_numa_info(hw_data, ordered_nics, dpdk_nics_info):
                                                    dpdk_nic['nic'])
             if phy_nic_name == nic['name']:
                 valid_dpdk_nic = True
-                dpdk_nic_info = {'name': phy_nic_name,
+                dpdk_nic_info = {'nic_id': dpdk_nic['nic'],
+                                 'name': phy_nic_name,
                                  'numa_node': nic['numa_node'],
                                  'mtu': dpdk_nic['mtu']}
                 dpdk_nics_numa_info.append(dpdk_nic_info);
@@ -285,6 +286,24 @@ def get_dpdk_nics_numa_info(hw_data, ordered_nics, dpdk_nics_info):
             raise Exception("Invalid DPDK NIC "
                             "'%(nic)s'" % {'nic': dpdk_nic['nic']})
     return dpdk_nics_numa_info
+
+
+def display_nics_numa_info(hw_data, dpdk_nics_info):
+    cpus = hw_data.get('numa_topology', {}).get('cpus', {})
+    if not cpus:
+       raise Exception('Introspection data does not '
+                       'have numa_topology.cpus')
+    print('NIC\'s and NUMA node mapping:')
+    for dpdk_nic in dpdk_nics_info:
+        numa_node_cpus = []
+        for cpu in cpus:
+            if cpu['numa_node'] == dpdk_nic['numa_node']:
+               numa_node_cpus.append(cpu['cpu'])
+        print('NIC %(nic)s => NUMA node %(node)d, '
+              'pCPU\'s: %(cpu)s' % {"nic": dpdk_nic['nic_id'],
+                                    "node": dpdk_nic['numa_node'],
+                                    "cpu": numa_node_cpus})
+    print('')
 
 
 # Gets distinct NUMA nodes in sorted order
@@ -380,12 +399,14 @@ if __name__ == '__main__':
         hugepage_alloc_perc = user_input.get(
             "huge_page_allocation_percentage", 50)
 
-        print("Deriving DPDK parameters based on "
-              "flavor: %s" % user_input['flavor'])
         hw_data = get_introspection_data(user_input['flavor'])
         ordered_nics = get_interfaces_list(hw_data)
         dpdk_nics_info = get_dpdk_nics_numa_info(hw_data, ordered_nics,
                                                  user_input['dpdk_nics'])
+        display_nics_numa_info(hw_data, dpdk_nics_info)
+
+        print("Deriving DPDK parameters based on "
+              "flavor: %s" % user_input['flavor'])
         dpdk_cpus = get_dpdk_core_list(hw_data, dpdk_nics_info,
                                        dpdk_nic_numa_cores_count) 
         host_cpus = get_host_cpus_list(hw_data)
@@ -406,6 +427,9 @@ if __name__ == '__main__':
         parameters['ComputeKernelArgs'] = kernel_args
         # prints the derived DPDK parameters
         for key, val in parameters.items():
+            if key == "NeutronDpdkMemoryChannels":
+                print('# Memory channels recommended value (4) is hard coded here.')
+                print('# Operator can use the memory channels value based on hardware manual.');
             if key == "NovaVcpuPinSet":
                 print('%(key)s: %(val)s' % {"key": key, "val": val})
             else:
