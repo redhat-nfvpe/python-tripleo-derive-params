@@ -27,20 +27,13 @@ def get_profile_name(flavor_name):
 def get_node_uuid(flavor_name):
     node_uuid = ''
     profile_name = get_profile_name(flavor_name)
-    cmd = "openstack overcloud profiles list"
+    cmd = "openstack overcloud profiles list -f json"
     output = subprocess.check_output(cmd,shell=True)
-    lines = output.split('\n')
-    heading_list = lines[1].split('|')
-    for heading in heading_list:
-        if 'Node UUID' in heading:
-            node_uuid_index = heading_list.index(heading)
-        if 'Current Profile' in heading:
-            current_profile_index = heading_list.index(heading)
-    for line in lines[2:len(lines)]:
-        column_list = line.split('|')
-        if len(column_list) > 1:
-            if column_list[current_profile_index].strip() == profile_name:
-                node_uuid = column_list[node_uuid_index]
+    profiles_list = json.loads(output)
+    for profile in profiles_list:
+        if profile["Current Profile"] == profile_name:
+            node_uuid = profile["Node UUID"]
+            break
     return node_uuid.strip()
 
 
