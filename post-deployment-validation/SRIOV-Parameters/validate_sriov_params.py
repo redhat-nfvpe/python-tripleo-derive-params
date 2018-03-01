@@ -238,7 +238,7 @@ def get_nova_reserved_host_mem_from_env(client):
     if not mem:
         cmd = 'sudo cat /etc/puppet/hieradata/service_configs.yaml | grep "nova::compute::reserved_host_memory"'
         stdin, stdout, stderr = client.exec_command(cmd)
-        mem = str(stdout.read()).replace('nova::compute::reserved_host_memory:').strip(' \"\n')
+        mem = str(stdout.read()).replace('nova::compute::reserved_host_memory:', '').strip(' \"\n')
     nova_reserved_host_mem = int(mem)
     return nova_reserved_host_mem
 
@@ -252,7 +252,7 @@ def get_nova_cpus_from_env(client):
     if not nova_cpus:
         cmd = 'sudo cat /etc/puppet/hieradata/service_configs.yaml | grep "nova::compute::vcpu_pin_set"'
         stdin, stdout, stderr = client.exec_command(cmd)
-        nova_cpus = str(stdout.read()).replace('nova::compute::vcpu_pin_set:').strip(' \"\n')
+        nova_cpus = str(stdout.read()).replace('nova::compute::vcpu_pin_set:', '').strip(' \"\n')
     return nova_cpus
 
 

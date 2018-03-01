@@ -156,6 +156,7 @@ def vaildate_user_input(user_input):
 
 if __name__ == '__main__':
     parameters = {}
+    hiera_variables = {}
     try:
         print("Validating user inputs..")        
         if len(sys.argv) != 2:
@@ -180,11 +181,29 @@ if __name__ == '__main__':
         parameters['NovaReservedHostMemory'] = host_mem
         parameters['HostIsolatedCoreList'] = isol_cpus
         parameters['ComputeKernelArgs'] = kernel_args
-        # prints the derived DPDK parameters
+        # prints the derived SRIOV parameters
         for key, val in parameters.items():
             if key == "NovaVcpuPinSet":
                 print('%(key)s: %(val)s' % {"key": key, "val": val})
+            elif key == "NovaReservedHostMemory":
+                 print('%(key)s: %(val)d' % {"key": key, "val": val})
             else:
                 print('%(key)s: \"%(val)s\"' % {"key": key, "val": val})
+        print('')
+
+        hiera_variables['nova::compute::reserved_host_memory'] = host_mem
+        hiera_variables['nova::compute::vcpu_pin_set'] = parameters['NovaVcpuPinSet']
+        # prints overriding role-specific parameters using hiera variables
+        print('# Overrides role-specific parameters using hiera variables')
+        print('# Optional this section, copy if any parameters are needed to override for this role')
+        print('# Copy required parameters to the <RoleName>ExtraConfig section')
+        for key, val in hiera_variables.items():
+            if key == "nova::compute::vcpu_pin_set":
+                print('%(key)s: %(val)s' % {"key": key, "val": val})
+            elif key == "nova::compute::reserved_host_memory":
+                 print('%(key)s: %(val)d' % {"key": key, "val": val})
+            else:
+                print('%(key)s: \"%(val)s\"' % {"key": key, "val": val})
+        print('')
     except Exception as exc:
         print("Error: %s" % exc)

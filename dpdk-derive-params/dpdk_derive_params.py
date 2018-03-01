@@ -377,6 +377,7 @@ def vaildate_user_input(user_input):
 
 if __name__ == '__main__':
     parameters = {}
+    hiera_variables = {}
     try:
         print("Validating user inputs..")        
         if len(sys.argv) != 2:
@@ -425,7 +426,32 @@ if __name__ == '__main__':
                 print('# Operator can use the memory channels value based on hardware manual.');
             if key == "NovaVcpuPinSet":
                 print('%(key)s: %(val)s' % {"key": key, "val": val})
+            elif key == "NovaReservedHostMemory":
+                 print('%(key)s: %(val)d' % {"key": key, "val": val})
             else:
                 print('%(key)s: \"%(val)s\"' % {"key": key, "val": val})
+        print('')
+
+        hiera_variables['nova::compute::reserved_host_memory'] = host_mem
+        hiera_variables['nova::compute::vcpu_pin_set'] = parameters['NovaVcpuPinSet']
+        hiera_variables['vswitch::dpdk::core_list'] = parameters['NeutronDpdkCoreList']
+        hiera_variables['vswitch::dpdk::memory_channels'] = mem_channels
+        hiera_variables['vswitch::dpdk::socket_mem'] = dpdk_socket_memory
+        # prints overriding role-specific parameters using hiera variables
+        print('# Overrides role-specific parameters using hiera variables')
+        print('# Optional this section, copy if any parameters are needed to override for this role')
+        print('# Copy required parameters to the <RoleName>ExtraConfig section')
+        for key, val in hiera_variables.items():
+            if key == "vswitch::dpdk::memory_channels":
+                print('# Memory channels recommended value (4) is hard coded here.')
+                print('# Operator can use the memory channels value based on hardware manual.');
+            if key == "nova::compute::vcpu_pin_set":
+                print('%(key)s: %(val)s' % {"key": key, "val": val})
+            elif key == "nova::compute::reserved_host_memory":
+                 print('%(key)s: %(val)d' % {"key": key, "val": val})
+            else:
+                print('%(key)s: \"%(val)s\"' % {"key": key, "val": val})
+        print('')
+
     except Exception as exc:
         print("Error: %s" % exc)

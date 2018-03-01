@@ -422,7 +422,7 @@ def get_instance_uuid(node_uuid):
 
 # gets the host ip address from instance UUID
 def get_host_ip(instance_uuid):
-    cmd = 'nova show 0dccbea6-6d34-4d1e-a1c8-80ffbe3a6e40 | grep "ctlplane network"'
+    cmd = 'nova show '+ instance_uuid + ' | grep "ctlplane network"'
     output = subprocess.check_output(cmd, shell=True)
     host_ip = output.replace('ctlplane network', '').strip(' |\n')
     return host_ip
@@ -470,7 +470,7 @@ def get_pmd_cpus_from_env(client):
     else:
         cmd = 'sudo cat /etc/puppet/hieradata/service_configs.yaml | grep "vswitch::dpdk::core_list"'
         stdin, stdout, stderr = client.exec_command(cmd)
-        pmd_cpus_list = str(stdout.read()).replace('vswitch::dpdk::core_list:').strip(' \"\n')
+        pmd_cpus_list = str(stdout.read()).replace('vswitch::dpdk::core_list:', '').strip(' \"\n')
     return pmd_cpus_list
 
 
@@ -494,7 +494,7 @@ def get_dpdk_socket_memory_from_env(client):
     if not dpdk_scoket_mem:
         cmd = 'sudo cat /etc/puppet/hieradata/service_configs.yaml | grep "vswitch::dpdk::socket_mem"'
         stdin, stdout, stderr = client.exec_command(cmd)
-        dpdk_scoket_mem = str(stdout.read()).replace('vswitch::dpdk::socket_mem:').strip(' \"\n')
+        dpdk_scoket_mem = str(stdout.read()).replace('vswitch::dpdk::socket_mem:', '').strip(' \"\n')
     return "\'"+dpdk_scoket_mem+"\'"
 
 
@@ -507,7 +507,7 @@ def get_nova_reserved_host_mem_from_env(client):
     if not mem:
         cmd = 'sudo cat /etc/puppet/hieradata/service_configs.yaml | grep "nova::compute::reserved_host_memory"'
         stdin, stdout, stderr = client.exec_command(cmd)
-        mem = str(stdout.read()).replace('nova::compute::reserved_host_memory:').strip(' \"\n')
+        mem = str(stdout.read()).replace('nova::compute::reserved_host_memory:', '').strip(' \"\n')
     nova_reserved_host_mem = int(mem)
     return nova_reserved_host_mem
 
@@ -521,7 +521,7 @@ def get_nova_cpus_from_env(client):
     if not nova_cpus:
         cmd = 'sudo cat /etc/puppet/hieradata/service_configs.yaml | grep "nova::compute::vcpu_pin_set"'
         stdin, stdout, stderr = client.exec_command(cmd)
-        nova_cpus = str(stdout.read()).replace('nova::compute::vcpu_pin_set:').strip(' \"\n')
+        nova_cpus = str(stdout.read()).replace('nova::compute::vcpu_pin_set:'), ''.strip(' \"\n')
     return nova_cpus
 
 
@@ -549,7 +549,7 @@ def get_dpdk_mem_channels_from_env(client):
         if not dpdk_mem_channels:
             cmd = 'sudo cat /etc/puppet/hieradata/service_configs.yaml | grep "vswitch::dpdk::memory_channels"'
             stdin, stdout, stderr = client.exec_command(cmd)
-            dpdk_mem_channels = str(stdout.read()).replace('vswitch::dpdk::memory_channels:').strip(' \"\n')
+            dpdk_mem_channels = str(stdout.read()).replace('vswitch::dpdk::memory_channels:', '').strip(' \"\n')
     return dpdk_mem_channels
 
 

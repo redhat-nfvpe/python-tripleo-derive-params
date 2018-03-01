@@ -43,12 +43,12 @@ network-environment.yaml file.
 * Tripleo-heat-templates should be copied and updated in the undercloud
   environment to deploy overcloud nodes.
 * Capture the list of roles with associated flavor name which are using SRIOV
-  feature to derive the DPDK parameters.
+  feature to derive the SRIOV parameters.
   Find flavor name referring the property Overcloud[RoleName]Flavor value in
   network-environment.yaml file for any role.
   ```
   OvercloudControlFlavor: control
-  OvercloudComputeSriovFlavor: computeovsdpdk
+  OvercloudComputeSriovFlavor: computesriov
   ```
 
 ## Parameters Default Value
@@ -90,6 +90,13 @@ Validating user inputs..
 Deriving SRIOV parameters based on flavor: compute
 ComputeKernelArgs: "default_hugepagesz=1GB hugepagesz=1G hugepages=126 intel_iommu=on"
 NovaVcpuPinSet: ['2-43','46-87']
-NovaReservedHostMemory: "4096"
+NovaReservedHostMemory: 4096
 HostIsolatedCoreList: "2-43,46-87"
+
+# Overrides role-specific parameters using hiera variables
+# Optional this section, copy if any parameters are needed to override for this role
+# Copy required parameters to the <RoleName>ExtraConfig section
+nova::compute::vcpu_pin_set: ['2-32','34-39','41-43','46-76','78-83','85-87']
+nova::compute::reserved_host_memory: 4096
+
 ```

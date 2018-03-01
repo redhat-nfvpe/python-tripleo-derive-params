@@ -110,7 +110,7 @@ NIC's and NUMA node mapping:
 NIC nic1 => NUMA node 0, pCPU's: [27, 20, 16, 10, 3, 28, 21, 24, 17, 11, 4, 0, 25, 18, 12, 5, 8, 1, 26, 19, 9, 2]
 
 Deriving DPDK parameters based on flavor: compute
-NovaReservedHostMemory: "4096"
+NovaReservedHostMemory: 4096
 NeutronDpdkCoreList: "'40,84,33,77'"
 ComputeKernelArgs: "default_hugepagesz=1GB hugepagesz=1G hugepages=126 intel_iommu=on"
 NovaVcpuPinSet: ['2-32','34-39','41-43','46-76','78-83','85-87']
@@ -120,6 +120,17 @@ HostIsolatedCoreList: "2-43,46-87"
 NeutronDpdkMemoryChannels: "4"
 NeutronDpdkSocketMemory: "'2048,2048'"
 HostCpusList: "'0,44,1,45'"
+
+# Overrides role-specific parameters using hiera variables
+# Optional this section, copy if any parameters are needed to override for this role
+# Copy required parameters to the <RoleName>ExtraConfig section
+nova::compute::vcpu_pin_set: ['2-32','34-39','41-43','46-76','78-83','85-87']
+nova::compute::reserved_host_memory: 4096
+# Memory channels recommended value (4) is hard coded here.
+# Operator can use the memory channels value based on hardware manual.
+vswitch::dpdk::memory_channels: "4"
+vswitch::dpdk::socket_mem: "'2048,2048'"
+vswitch::dpdk::core_list: "'40,84,33,77'"
 ```
 
 ## Note
