@@ -76,45 +76,74 @@ $ python validate_sriov_params.py user_inputs.json --flavor "flavor name" --huge
 ## Example
 
 ```
-$ python validate_sriov_params.py --flavor "computeovsdpdk" --huge_page_allocation_percentage 50
+$ python validate_sriov_params.py --flavor "computesriov" --huge_page_allocation_percentage 50
 Validating user inputs..
 {"flavor": "computesriov", "huge_page_allocation_percentage": "50"}
 Collects the deployed value for parameters from node: 172.18.0.31
 Collects the hiera value for parameters from node: 172.18.0.31
-+------------------------+-----------------------------------------------------------------+-------------------+-----------------------------------------------------------------------------------------+
-| Parameters             | Deployment Value                                                | Hiera Data        | Validation Messages                                                                     |
-+------------------------+-----------------------------------------------------------------+-------------------+-----------------------------------------------------------------------------------------+
-| NovaReservedHostMemory | 4096                                                            | 4096              | valid.                                                                                  |
-|                        |                                                                 |                   |                                                                                         |
-| NovaVcpuPinSet         | '12-21,24-87'                                                   | ["12-21","24-87"] | Missing thread siblings for thread: 44 in nova cpus, thread siblings: [0, 44].          |
-|                        |                                                                 |                   | Missing thread siblings for thread: 45 in nova cpus, thread siblings: [1, 45].          |
-|                        |                                                                 |                   | Missing thread siblings for thread: 46 in nova cpus, thread siblings: [2, 46].          |
-|                        |                                                                 |                   | Missing thread siblings for thread: 47 in nova cpus, thread siblings: [3, 47].          |
-|                        |                                                                 |                   | Missing thread siblings for thread: 48 in nova cpus, thread siblings: [4, 48].          |
-|                        |                                                                 |                   | Missing thread siblings for thread: 49 in nova cpus, thread siblings: [5, 49].          |
-|                        |                                                                 |                   | Missing thread siblings for thread: 50 in nova cpus, thread siblings: [6, 50].          |
-|                        |                                                                 |                   | Missing thread siblings for thread: 51 in nova cpus, thread siblings: [7, 51].          |
-|                        |                                                                 |                   | Missing thread siblings for thread: 52 in nova cpus, thread siblings: [8, 52].          |
-|                        |                                                                 |                   | Missing thread siblings for thread: 53 in nova cpus, thread siblings: [9, 53].          |
-|                        |                                                                 |                   | Missing thread siblings for thread: 54 in nova cpus, thread siblings: [10, 54].         |
-|                        |                                                                 |                   | Missing thread siblings for thread: 55 in nova cpus, thread siblings: [11, 55].         |
-|                        |                                                                 |                   | Missing thread siblings for thread: 66 in nova cpus, thread siblings: [22, 66].         |
-|                        |                                                                 |                   | Missing thread siblings for thread: 67 in nova cpus, thread siblings: [23, 67].         |
-|                        |                                                                 |                   | Duplicated physical cores in host CPU's: [44, 45].                                      |
-|                        |                                                                 |                   |                                                                                         |
-| HostIsolatedCoreList   | '10-87'                                                         | NA                | Missing thread siblings for thread: 44 in host isolated cpus, thread siblings: [0, 44]. |
-|                        |                                                                 |                   | Missing thread siblings for thread: 45 in host isolated cpus, thread siblings: [1, 45]. |
-|                        |                                                                 |                   | Missing thread siblings for thread: 46 in host isolated cpus, thread siblings: [2, 46]. |
-|                        |                                                                 |                   | Missing thread siblings for thread: 47 in host isolated cpus, thread siblings: [3, 47]. |
-|                        |                                                                 |                   | Missing thread siblings for thread: 48 in host isolated cpus, thread siblings: [4, 48]. |
-|                        |                                                                 |                   | Missing thread siblings for thread: 49 in host isolated cpus, thread siblings: [5, 49]. |
-|                        |                                                                 |                   | Missing thread siblings for thread: 50 in host isolated cpus, thread siblings: [6, 50]. |
-|                        |                                                                 |                   | Missing thread siblings for thread: 51 in host isolated cpus, thread siblings: [7, 51]. |
-|                        |                                                                 |                   | Missing thread siblings for thread: 52 in host isolated cpus, thread siblings: [8, 52]. |
-|                        |                                                                 |                   | Missing thread siblings for thread: 53 in host isolated cpus, thread siblings: [9, 53]. |
-|                        |                                                                 |                   | Duplicated in host CPU's: [44, 45].                                                     |
-|                        |                                                                 |                   |                                                                                         |
-| ComputeKernelArgs      | default_hugepagesz=1GB hugepages=1G hugepages=64 intel_iommu=on | NA                | expected: default_hugepagesz=1GB hugepages=1G hugepages=126 intel_iommu=on iommu=pt     |
-|                        |                                                                 |                   |                                                                                         |
-+------------------------+-----------------------------------------------------------------+-------------------+-----------------------------------------------------------------------------------------+
+
++------------------------+------------------------+-------------------+---------------------------------------------------------------+
+| Parameters             | Deployment Value       | Hiera Data        | Validation Messages                                           |
++------------------------+------------------------+-------------------+---------------------------------------------------------------+
+| NovaReservedHostMemory | 4096                   | 4096              | valid.                                                        |
+|                        |                        |                   |                                                               |
+| NovaVcpuPinSet         | '12-21,24-87'          | ["12-21","24-87"] | Missing thread siblings for thread: 44 in nova cpus,          |
+|                        |                        |                   |  thread siblings: [0, 44].                                    |
+|                        |                        |                   | Missing thread siblings for thread: 45 in nova cpus,          |
+|                        |                        |                   |  thread siblings: [1, 45].                                    |
+|                        |                        |                   | Missing thread siblings for thread: 46 in nova cpus,          |
+|                        |                        |                   |  thread siblings: [2, 46].                                    |
+|                        |                        |                   | Missing thread siblings for thread: 47 in nova cpus,          |
+|                        |                        |                   |  thread siblings: [3, 47].                                    |
+|                        |                        |                   | Missing thread siblings for thread: 48 in nova cpus,          |
+|                        |                        |                   |  thread siblings: [4, 48].                                    |
+|                        |                        |                   | Missing thread siblings for thread: 49 in nova cpus,          |
+|                        |                        |                   |  thread siblings: [5, 49].                                    |
+|                        |                        |                   | Missing thread siblings for thread: 50 in nova cpus,          |
+|                        |                        |                   |  thread siblings: [6, 50].                                    |
+|                        |                        |                   | Missing thread siblings for thread: 51 in nova cpus,          |
+|                        |                        |                   |  thread siblings: [7, 51].                                    |
+|                        |                        |                   | Missing thread siblings for thread: 52 in nova cpus,          |
+|                        |                        |                   |  thread siblings: [8, 52].                                    |
+|                        |                        |                   | Missing thread siblings for thread: 53 in nova cpus,          |
+|                        |                        |                   |  thread siblings: [9, 53].                                    |
+|                        |                        |                   | Missing thread siblings for thread: 54 in nova cpus,          |
+|                        |                        |                   |  thread siblings: [10, 54].                                   |
+|                        |                        |                   | Missing thread siblings for thread: 55 in nova cpus,          |
+|                        |                        |                   |  thread siblings: [11, 55].                                   |
+|                        |                        |                   | Missing thread siblings for thread: 66 in nova cpus,          |
+|                        |                        |                   |  thread siblings: [22, 66].                                   |
+|                        |                        |                   | Missing thread siblings for thread: 67 in nova cpus,          |
+|                        |                        |                   |  thread siblings: [23, 67].                                   |
+|                        |                        |                   | Duplicated physical cores in host CPU's: [44, 45].            |
+|                        |                        |                   |                                                               |
+| HostIsolatedCoreList   | '10-87'                | NA                | Missing thread siblings for thread: 44 in host isolated cpus, |
+|                        |                        |                   |  thread siblings: [0, 44].                                    |
+|                        |                        |                   | Missing thread siblings for thread: 45 in host isolated cpus, |
+|                        |                        |                   |  thread siblings: [1, 45].                                    |
+|                        |                        |                   | Missing thread siblings for thread: 46 in host isolated cpus, |
+|                        |                        |                   |  thread siblings: [2, 46].                                    |
+|                        |                        |                   | Missing thread siblings for thread: 47 in host isolated cpus, |
+|                        |                        |                   |  thread siblings: [3, 47].                                    |
+|                        |                        |                   | Missing thread siblings for thread: 48 in host isolated cpus, |
+|                        |                        |                   |  thread siblings: [4, 48].                                    |
+|                        |                        |                   | Missing thread siblings for thread: 49 in host isolated cpus, |
+|                        |                        |                   |  thread siblings: [5, 49].                                    |
+|                        |                        |                   | Missing thread siblings for thread: 50 in host isolated cpus, |
+|                        |                        |                   |  thread siblings: [6, 50].                                    |
+|                        |                        |                   | Missing thread siblings for thread: 51 in host isolated cpus, |
+|                        |                        |                   |  thread siblings: [7, 51].                                    |
+|                        |                        |                   | Missing thread siblings for thread: 52 in host isolated cpus, |
+|                        |                        |                   |  thread siblings: [8, 52].                                    |
+|                        |                        |                   | Missing thread siblings for thread: 53 in host isolated cpus, |
+|                        |                        |                   |  thread siblings: [9, 53].                                    |
+|                        |                        |                   | Duplicated in host CPU's: [44, 45].                           |
+|                        |                        |                   |                                                               |
+| ComputeKernelArgs      | default_hugepagesz=1GB | NA                | expected: default_hugepagesz=1GB                              |
+|                        |  hugepages=1G          |                   |  hugepages=1G                                                 |
+|                        |  hugepages=64          |                   |  hugepages=126                                                |
+|                        |  intel_iommu=on        |                   |  intel_iommu=on                                               |
+|                        |                        |                   |  iommu=pt                                                     |
+|                        |                        |                   |                                                               |
++------------------------+------------------------+-------------------+---------------------------------------------------------------+
 ```

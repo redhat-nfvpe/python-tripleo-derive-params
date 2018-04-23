@@ -198,6 +198,18 @@ def get_dpdk_socket_memory(client, dpdk_nics_numa_info, numa_nodes, minimum_sock
     return "\'"+','.join([str(sm) for sm in dpdk_socket_memory_list])+"\'"
 
 
+# Gets the installed ovs version
+def get_ovs_version(client):
+    cmd = "sudo ovs-vsctl -V | grep ovs-vsctl"
+    stdin, stdout, stderr = client.exec_command(cmd)
+    output = str(stdout.read())
+    if output and output.startswith('ovs-vsctl (Open vSwitch)'):
+        return output.replace('ovs-vsctl (Open vSwitch)', '').strip(' \n')
+    else:
+        msg = "Unable to determine 'OVS Version'"
+        raise Exception(msg)
+          
+
 # Gets the CPU model
 def get_cpu_model(client):
     cmd ="sudo lscpu | grep 'Model name'"
@@ -614,7 +626,8 @@ def validate_dpdk_core_list(dict_cpus, dpdk_core_list, host_cpus,
                     dpdk_cores.append(key)
                 for thread in cpu['thread_siblings']:
                     if str(thread) not in dpdk_cpus:
-                        msg += 'Missing thread siblings for thread: ' + dpdk_cpu + ' in PMD cores, thread siblings: ' + str(cpu['thread_siblings'])+'.\n'
+                        msg += ('Missing thread siblings for thread: ' + dpdk_cpu + ' in PMD cores,'
+                                '\n thread siblings: ' + str(cpu['thread_siblings'])+'.\n')
         
     if dup_host_cpus:
         msg += 'Duplicated in host CPU\'s: ' + str(dup_host_cpus) + '.\n'
@@ -626,9 +639,11 @@ def validate_dpdk_core_list(dict_cpus, dpdk_core_list, host_cpus,
                     core_count += 1
             if node in dpdk_nics_numa_nodes:
                 if core_count < dpdk_nic_numa_cores_count:
-                    msg += 'Number of physical cores for DPDK NIC NUMA node('+ str(node) +') is less than recommended cores \'' + str(dpdk_nic_numa_cores_count) +'\'.\n'
+                    msg += ('Number of physical cores for DPDK NIC NUMA node('+ str(node) +') is less than'
+                            '\n recommended cores \'' + str(dpdk_nic_numa_cores_count) +'\'.\n')
                 elif core_count > dpdk_nic_numa_cores_count:
-                    msg += 'Number of physical cores for DPDK NIC NUMA node('+ str(node) +') is greater than recommended cores \'' + str(dpdk_nic_numa_cores_count) +'\'.\n'
+                    msg += ('Number of physical cores for DPDK NIC NUMA node('+ str(node) +') is greater'
+                            '\n than recommended cores \'' + str(dpdk_nic_numa_cores_count) +'\'.\n')
             else:
                 if core_count == 0:
                     msg += 'Missing physical cores for NUMA node: \'' + str(node) + '\' in PMD cores.\n'
@@ -688,7 +703,8 @@ def validate_nova_cpus(dict_cpus, nova_cpus_env, dpdk_cpus_env, host_cpus, numa_
                     nova_cores.append(key)
                 for thread in cpu['thread_siblings']:
                     if thread not in nova_cpus:
-                        msg += 'Missing thread siblings for thread: ' + str(nova_cpu) + ' in nova cpus, thread siblings: ' + str(cpu['thread_siblings'])+'.\n'
+                        msg += ('Missing thread siblings for thread: ' + str(nova_cpu) + ' in nova cpus,'
+                                '\n thread siblings: ' + str(cpu['thread_siblings'])+'.\n')
 
     if dup_host_cpus:
         msg += 'Duplicated physical cores in host CPU\'s: ' + str(dup_host_cpus) + '.\n'
@@ -721,7 +737,8 @@ def validate_isol_cpus(dict_cpus, isol_cpus_env, host_cpus, numa_nodes):
                     isol_cores.append(key)
                 for thread in cpu['thread_siblings']:
                     if thread not in isol_cpus:
-                        msg += 'Missing thread siblings for thread: ' + str(isol_cpu) + ' in host isolated cpus, thread siblings: ' + str(cpu['thread_siblings'])+'.\n'
+                        msg += ('Missing thread siblings for thread: ' + str(isol_cpu) + ' in host isolated cpus,'
+                                '\n thread siblings: ' + str(cpu['thread_siblings'])+'.\n')
 
     if dup_host_cpus:
         msg += 'Duplicated in host CPU\'s: ' + str(dup_host_cpus) + '.\n'
@@ -739,10 +756,10 @@ def validate_isol_cpus(dict_cpus, isol_cpus_env, host_cpus, numa_nodes):
 # Validation for kernel args
 def validate_kernel_args(deployed_kernel_args, derived_kernel_args):
     msg = ('expected: default_hugepagesz=' + derived_kernel_args['default_hugepagesz'] +
-           ' hugepages='+ derived_kernel_args['hugepagesz'] +
-           ' hugepages=' + derived_kernel_args['hugepages'] +
-           ' intel_iommu=' + derived_kernel_args['intel_iommu'] + 
-           ' iommu=' + derived_kernel_args['iommu'] + '\n')
+           '\n hugepages='+ derived_kernel_args['hugepagesz'] +
+           '\n hugepages=' + derived_kernel_args['hugepages'] +
+           '\n intel_iommu=' + derived_kernel_args['intel_iommu'] + 
+           '\n iommu=' + derived_kernel_args['iommu'] + '\n')
     if (derived_kernel_args['intel_iommu'] == deployed_kernel_args['intel_iommu'] and
         derived_kernel_args['default_hugepagesz'] == deployed_kernel_args['default_hugepagesz'] and
         derived_kernel_args['hugepagesz'] == deployed_kernel_args['hugepagesz'] and
@@ -750,11 +767,31 @@ def validate_kernel_args(deployed_kernel_args, derived_kernel_args):
         msg = "valid.\n"
     return msg
 
+# Gets ovs parameters name in different ovs versions
+def get_ovs_params_name(client):
+    ovs_params = {}
+    ovs_version = get_ovs_version(client)
+    if (ovs_version.startswith('2.5') or ovs_version.startswith('2.6') or ovs_version.startswith('2.7')):
+        ovs_params['dpdk_cpus'] = 'NeutronDpdkCoreList'
+        ovs_params['socket_mem'] = 'NeutronDpdkSocketMemory'
+        ovs_params['isol_cpus'] = 'HostIsolatedCoreList'
+        ovs_params['mem_channels'] = 'NeutronDpdkMemoryChannels'
+        ovs_params['kernel_args'] = 'ComputeKernelArgs'
+    else:
+        ovs_params['dpdk_cpus'] = 'OvsPmdCoreList'
+        ovs_params['socket_mem'] = 'OvsDpdkSocketMemory'
+        ovs_params['isol_cpus'] = 'IsolCpusList'
+        ovs_params['mem_channels'] = 'OvsDpdkMemoryChannels'
+        ovs_params['kernel_args'] = 'KernelArgs'
+    return ovs_params
+
 
 # Validates the DPDK parameters
 def validate_dpdk_parameters(client, deployed, hiera, node_uuid, dpdk_nic_numa_cores_count,
                           hugepage_alloc_perc):
     messages = {}
+    ovs_params = get_ovs_params_name(client)
+
     dict_cpus = get_nodes_cores_info(client)
     cpus = list(dict_cpus.values())
     dpdk_nics_numa_info = get_dpdk_nics_info(client)
@@ -775,30 +812,30 @@ def validate_dpdk_parameters(client, deployed, hiera, node_uuid, dpdk_nic_numa_c
     derived_kernel_args = get_kernel_args(client, hugepage_alloc_perc)
     messages['kernel_args'] = validate_kernel_args(deployed['ComputeKernelArgs'], derived_kernel_args)
     messages['tuned'] = validate_tuned_status(deployed['tuned'])
-    validation_messages(deployed, hiera, messages)
+    validation_messages(deployed, hiera, ovs_params, messages)
 
 
 # Displays validation messages
-def validation_messages(deployed, hiera, messages):
+def validation_messages(deployed, hiera, ovs_params, messages):
     t = PrettyTable(['Parameters', 'Deployment Value', 'Hiera Data', 'Validation Messages'])
     t.align["Parameters"] = "l"
     t.align["Deployment Value"] = "l"
     t.align["Hiera Data"] ="l"
     t.align["Validation Messages"] = "l"
     t.add_row(['HostCpusList', deployed['HostCpusList'], 'NA', messages['host_cpus']]) 
-    t.add_row(['NeutronDpdkCoreList', deployed['NeutronDpdkCoreList'], hiera['NeutronDpdkCoreList'], messages['dpdk_cpus']])
-    t.add_row(['NeutronDpdkSocketMemory', deployed['NeutronDpdkSocketMemory'], hiera['NeutronDpdkSocketMemory'], messages['socket_mem']])
+    t.add_row([ovs_params['dpdk_cpus'], deployed['NeutronDpdkCoreList'], hiera['NeutronDpdkCoreList'], messages['dpdk_cpus']])
+    t.add_row([ovs_params['socket_mem'], deployed['NeutronDpdkSocketMemory'], hiera['NeutronDpdkSocketMemory'], messages['socket_mem']])
     t.add_row(['NovaReservedHostMemory', deployed['NovaReservedHostMemory'], hiera['NovaReservedHostMemory'], messages['reserved_host_mem']])
     t.add_row(['NovaVcpuPinSet', deployed['NovaVcpuPinSet'], hiera['NovaVcpuPinSet'], messages['nova_cpus']])
-    t.add_row(['HostIsolatedCoreList', deployed['HostIsolatedCoreList'], 'NA', messages['isol_cpus']])
+    t.add_row([ovs_params['isol_cpus'], deployed['HostIsolatedCoreList'], 'NA', messages['isol_cpus']])
     deployed_kernel_args = deployed['ComputeKernelArgs']
-    kernel_args = ('default_hugepagesz=' + deployed_kernel_args['default_hugepagesz'] +
-           ' hugepages='+ deployed_kernel_args['hugepagesz'] +
-           ' hugepages=' + deployed_kernel_args['hugepages'] +
+    kernel_args = ('default_hugepagesz=' + deployed_kernel_args['default_hugepagesz'] + '\n'+
+           ' hugepages='+ deployed_kernel_args['hugepagesz'] + '\n' +
+           ' hugepages=' + deployed_kernel_args['hugepages'] + '\n' +
            ' intel_iommu='+ deployed_kernel_args['intel_iommu'])
-    t.add_row(['ComputeKernelArgs', kernel_args, 'NA', messages['kernel_args']])
+    t.add_row([ovs_params['kernel_args'], kernel_args, 'NA', messages['kernel_args']])
     mem_channels_msg = 'Recommended value is "4" but it should be configured based on hardware spec.'
-    t.add_row(['NeutronDpdkMemoryChannels', deployed['NeutronDpdkMemoryChannels'], hiera['NeutronDpdkMemoryChannels'], mem_channels_msg])
+    t.add_row([ovs_params['mem_channels'], deployed['NeutronDpdkMemoryChannels'], hiera['NeutronDpdkMemoryChannels'], mem_channels_msg])
     t.add_row(['tuned', deployed['tuned'], 'NA', messages['tuned']])
     print(t)
 

@@ -99,55 +99,88 @@ DPDK NIC's and NUMA node mapping:
 NIC "p1p2": NUMA node 1, Physical CPU's: [1, 3, 5, 7, 9, 11, 13, 15, 17, 19, 21, 23, 25, 27, 29, 31, 33, 35, 37, 39, 41, 43]
 NIC "p1p1": NUMA node 1, Physical CPU's: [1, 3, 5, 7, 9, 11, 13, 15, 17, 19, 21, 23, 25, 27, 29, 31, 33, 35, 37, 39, 41, 43]
 
-+---------------------------+-----------------------------------------------------------------+-------------------+-----------------------------------------------------------------------------------------+
-| Parameters                | Deployment Value                                                | Hiera Data        | Validation Messages                                                                     |
-+---------------------------+-----------------------------------------------------------------+-------------------+-----------------------------------------------------------------------------------------+
-| HostCpusList              | '0,1,2,3,4,5,6,7,8,9'                                           | NA                | expected: 0,1,44,45.                                                                    |
-|                           |                                                                 |                   |                                                                                         |
-| NeutronDpdkCoreList       | '10,11,22,23'                                                   | '10,11,22,23'     | Missing thread siblings for thread: 10 in PMD cores, thread siblings: [10, 54].         |
-|                           |                                                                 |                   | Missing thread siblings for thread: 11 in PMD cores, thread siblings: [11, 55].         |
-|                           |                                                                 |                   | Missing thread siblings for thread: 22 in PMD cores, thread siblings: [22, 66].         |
-|                           |                                                                 |                   | Missing thread siblings for thread: 23 in PMD cores, thread siblings: [23, 67].         |
-|                           |                                                                 |                   | Number of physical cores for DPDK NIC NUMA node(1) is less than recommended cores '1'.  |
-|                           |                                                                 |                   |                                                                                         |
-| NeutronDpdkSocketMemory   | '2048,2048'                                                     | '2048,2048'       | valid.                                                                                  |
-|                           |                                                                 |                   |                                                                                         |
-| NovaReservedHostMemory    | 4096                                                            | 4096              | valid.                                                                                  |
-|                           |                                                                 |                   |                                                                                         |
-| NovaVcpuPinSet            | '12-21,24-87'                                                   | ["12-21","24-87"] | Missing thread siblings for thread: 44 in nova cpus, thread siblings: [0, 44].          |
-|                           |                                                                 |                   | Missing thread siblings for thread: 45 in nova cpus, thread siblings: [1, 45].          |
-|                           |                                                                 |                   | Missing thread siblings for thread: 46 in nova cpus, thread siblings: [2, 46].          |
-|                           |                                                                 |                   | Missing thread siblings for thread: 47 in nova cpus, thread siblings: [3, 47].          |
-|                           |                                                                 |                   | Missing thread siblings for thread: 48 in nova cpus, thread siblings: [4, 48].          |
-|                           |                                                                 |                   | Missing thread siblings for thread: 49 in nova cpus, thread siblings: [5, 49].          |
-|                           |                                                                 |                   | Missing thread siblings for thread: 50 in nova cpus, thread siblings: [6, 50].          |
-|                           |                                                                 |                   | Missing thread siblings for thread: 51 in nova cpus, thread siblings: [7, 51].          |
-|                           |                                                                 |                   | Missing thread siblings for thread: 52 in nova cpus, thread siblings: [8, 52].          |
-|                           |                                                                 |                   | Missing thread siblings for thread: 53 in nova cpus, thread siblings: [9, 53].          |
-|                           |                                                                 |                   | Missing thread siblings for thread: 54 in nova cpus, thread siblings: [10, 54].         |
-|                           |                                                                 |                   | Missing thread siblings for thread: 55 in nova cpus, thread siblings: [11, 55].         |
-|                           |                                                                 |                   | Missing thread siblings for thread: 66 in nova cpus, thread siblings: [22, 66].         |
-|                           |                                                                 |                   | Missing thread siblings for thread: 67 in nova cpus, thread siblings: [23, 67].         |
-|                           |                                                                 |                   | Duplicated physical cores in host CPU's: [44, 45].                                      |
-|                           |                                                                 |                   |                                                                                         |
-| HostIsolatedCoreList      | '10-87'                                                         | NA                | Missing thread siblings for thread: 44 in host isolated cpus, thread siblings: [0, 44]. |
-|                           |                                                                 |                   | Missing thread siblings for thread: 45 in host isolated cpus, thread siblings: [1, 45]. |
-|                           |                                                                 |                   | Missing thread siblings for thread: 46 in host isolated cpus, thread siblings: [2, 46]. |
-|                           |                                                                 |                   | Missing thread siblings for thread: 47 in host isolated cpus, thread siblings: [3, 47]. |
-|                           |                                                                 |                   | Missing thread siblings for thread: 48 in host isolated cpus, thread siblings: [4, 48]. |
-|                           |                                                                 |                   | Missing thread siblings for thread: 49 in host isolated cpus, thread siblings: [5, 49]. |
-|                           |                                                                 |                   | Missing thread siblings for thread: 50 in host isolated cpus, thread siblings: [6, 50]. |
-|                           |                                                                 |                   | Missing thread siblings for thread: 51 in host isolated cpus, thread siblings: [7, 51]. |
-|                           |                                                                 |                   | Missing thread siblings for thread: 52 in host isolated cpus, thread siblings: [8, 52]. |
-|                           |                                                                 |                   | Missing thread siblings for thread: 53 in host isolated cpus, thread siblings: [9, 53]. |
-|                           |                                                                 |                   | Duplicated in host CPU's: [44, 45].                                                     |
-|                           |                                                                 |                   |                                                                                         |
-| ComputeKernelArgs         | default_hugepagesz=1GB hugepages=1G hugepages=64 intel_iommu=on | NA                | expected: default_hugepagesz=1GB hugepages=1G hugepages=126 intel_iommu=on iommu=pt     |
-|                           |                                                                 |                   |                                                                                         |
-| NeutronDpdkMemoryChannels | "4"                                                             | 4                 | Recommended value is "4" but it should be configured based on hardware spec.            |
-| tuned                     | cpu-partitioning                                                | NA                | enabled.                                                                                |
-|                           |                                                                 |                   |                                                                                         |
-+---------------------------+-----------------------------------------------------------------+-------------------+-----------------------------------------------------------------------------------------+
++---------------------------+------------------------+-------------------+------------------------------------------------------------------------------+
+| Parameters                | Deployment Value       | Hiera Data        | Validation Messages                                                          |
++---------------------------+------------------------+-------------------+------------------------------------------------------------------------------+
+| HostCpusList              | '0,1,2,3,4,5,6,7,8,9'  | NA                | expected: 0,1,44,45.                                                         |
+|                           |                        |                   |                                                                              |
+| NeutronDpdkCoreList       | '10,11,22,23'          | '10,11,22,23'     | Missing thread siblings for thread: 10 in PMD cores,                         |
+|                           |                        |                   |  thread siblings: [10, 54].                                                  |
+|                           |                        |                   | Missing thread siblings for thread: 11 in PMD cores,                         |
+|                           |                        |                   |  thread siblings: [11, 55].                                                  |
+|                           |                        |                   | Missing thread siblings for thread: 22 in PMD cores,                         |
+|                           |                        |                   |  thread siblings: [22, 66].                                                  |
+|                           |                        |                   | Missing thread siblings for thread: 23 in PMD cores,                         |
+|                           |                        |                   |  thread siblings: [23, 67].                                                  |
+|                           |                        |                   | Number of physical cores for DPDK NIC NUMA node(1) is less than              |
+|                           |                        |                   |  recommended cores '1'.                                                      |
+|                           |                        |                   |                                                                              |
+| NeutronDpdkSocketMemory   | '2048,2048'            | '2048,2048'       | valid.                                                                       |
+|                           |                        |                   |                                                                              |
+| NovaReservedHostMemory    | 4096                   | 4096              | valid.                                                                       |
+|                           |                        |                   |                                                                              |
+| NovaVcpuPinSet            | '12-21,24-87'          | ["12-21","24-87"] | Missing thread siblings for thread: 44 in nova cpus,                         |
+|                           |                        |                   |  thread siblings: [0, 44].                                                   |
+|                           |                        |                   | Missing thread siblings for thread: 45 in nova cpus,                         |
+|                           |                        |                   |  thread siblings: [1, 45].                                                   |
+|                           |                        |                   | Missing thread siblings for thread: 46 in nova cpus,                         |
+|                           |                        |                   |  thread siblings: [2, 46].                                                   |
+|                           |                        |                   | Missing thread siblings for thread: 47 in nova cpus,                         |
+|                           |                        |                   |  thread siblings: [3, 47].                                                   |
+|                           |                        |                   | Missing thread siblings for thread: 48 in nova cpus,                         |
+|                           |                        |                   |  thread siblings: [4, 48].                                                   |
+|                           |                        |                   | Missing thread siblings for thread: 49 in nova cpus,                         |
+|                           |                        |                   |  thread siblings: [5, 49].                                                   |
+|                           |                        |                   | Missing thread siblings for thread: 50 in nova cpus,                         |
+|                           |                        |                   |  thread siblings: [6, 50].                                                   |
+|                           |                        |                   | Missing thread siblings for thread: 51 in nova cpus,                         |
+|                           |                        |                   |  thread siblings: [7, 51].                                                   |
+|                           |                        |                   | Missing thread siblings for thread: 52 in nova cpus,                         |
+|                           |                        |                   |  thread siblings: [8, 52].                                                   |
+|                           |                        |                   | Missing thread siblings for thread: 53 in nova cpus,                         |
+|                           |                        |                   |  thread siblings: [9, 53].                                                   |
+|                           |                        |                   | Missing thread siblings for thread: 54 in nova cpus,                         |
+|                           |                        |                   |  thread siblings: [10, 54].                                                  |
+|                           |                        |                   | Missing thread siblings for thread: 55 in nova cpus,                         |
+|                           |                        |                   |  thread siblings: [11, 55].                                                  |
+|                           |                        |                   | Missing thread siblings for thread: 66 in nova cpus,                         |
+|                           |                        |                   |  thread siblings: [22, 66].                                                  |
+|                           |                        |                   | Missing thread siblings for thread: 67 in nova cpus,                         |
+|                           |                        |                   |  thread siblings: [23, 67].                                                  |
+|                           |                        |                   | Duplicated physical cores in host CPU's: [44, 45].                           |
+|                           |                        |                   |                                                                              |
+| HostIsolatedCoreList      | '10-87'                | NA                | Missing thread siblings for thread: 44 in host isolated cpus,                |
+|                           |                        |                   |  thread siblings: [0, 44].                                                   |
+|                           |                        |                   | Missing thread siblings for thread: 45 in host isolated cpus,                |
+|                           |                        |                   |  thread siblings: [1, 45].                                                   |
+|                           |                        |                   | Missing thread siblings for thread: 46 in host isolated cpus,                |
+|                           |                        |                   |  thread siblings: [2, 46].                                                   |
+|                           |                        |                   | Missing thread siblings for thread: 47 in host isolated cpus,                |
+|                           |                        |                   |  thread siblings: [3, 47].                                                   |
+|                           |                        |                   | Missing thread siblings for thread: 48 in host isolated cpus,                |
+|                           |                        |                   |  thread siblings: [4, 48].                                                   |
+|                           |                        |                   | Missing thread siblings for thread: 49 in host isolated cpus,                |
+|                           |                        |                   |  thread siblings: [5, 49].                                                   |
+|                           |                        |                   | Missing thread siblings for thread: 50 in host isolated cpus,                |
+|                           |                        |                   |  thread siblings: [6, 50].                                                   |
+|                           |                        |                   | Missing thread siblings for thread: 51 in host isolated cpus,                |
+|                           |                        |                   |  thread siblings: [7, 51].                                                   |
+|                           |                        |                   | Missing thread siblings for thread: 52 in host isolated cpus,                |
+|                           |                        |                   |  thread siblings: [8, 52].                                                   |
+|                           |                        |                   | Missing thread siblings for thread: 53 in host isolated cpus,                |
+|                           |                        |                   |  thread siblings: [9, 53].                                                   |
+|                           |                        |                   | Duplicated in host CPU's: [44, 45].                                          |
+|                           |                        |                   |                                                                              |
+| ComputeKernelArgs         | default_hugepagesz=1GB | NA                | expected: default_hugepagesz=1GB                                             |
+|                           |  hugepages=1G          |                   |  hugepages=1G                                                                |
+|                           |  hugepages=64          |                   |  hugepages=126                                                               |
+|                           |  intel_iommu=on        |                   |  intel_iommu=on                                                              |
+|                           |                        |                   |  iommu=pt                                                                    |
+|                           |                        |                   |                                                                              |
+| NeutronDpdkMemoryChannels | "4"                    | 4                 | Recommended value is "4" but it should be configured based on hardware spec. |
+| tuned                     | cpu-partitioning       | NA                | enabled.                                                                     |
+|                           |                        |                   |                                                                              |
++---------------------------+------------------------+-------------------+------------------------------------------------------------------------------+
 ```
 
 ## Note

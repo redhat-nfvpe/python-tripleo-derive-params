@@ -388,7 +388,8 @@ def validate_nova_cpus(dict_cpus, nova_cpus_env, host_cpus, numa_nodes):
                     nova_cores.append(key)
                 for thread in cpu['thread_siblings']:
                     if thread not in nova_cpus:
-                        msg += 'Missing thread siblings for thread: ' + str(nova_cpu) + ' in nova cpus, thread siblings: ' + str(cpu['thread_siblings'])+'.\n'
+                        msg += ('Missing thread siblings for thread: ' + str(nova_cpu) + ' in nova cpus,'
+                                '\n thread siblings: ' + str(cpu['thread_siblings'])+'.\n')
 
     if dup_host_cpus:
         msg += 'Duplicated physical cores in host CPU\'s: ' + str(dup_host_cpus) + '.\n'
@@ -419,7 +420,8 @@ def validate_isol_cpus(dict_cpus, isol_cpus_env, host_cpus, numa_nodes):
                     isol_cores.append(key)
                 for thread in cpu['thread_siblings']:
                     if thread not in isol_cpus:
-                        msg += 'Missing thread siblings for thread: ' + str(isol_cpu) + ' in host isolated cpus, thread siblings: ' + str(cpu['thread_siblings'])+'.\n'
+                        msg += ('Missing thread siblings for thread: ' + str(isol_cpu) + ' in host isolated cpus,'
+                                '\n thread siblings: ' + str(cpu['thread_siblings'])+'.\n')
 
     if dup_host_cpus:
         msg += 'Duplicated in host CPU\'s: ' + str(dup_host_cpus) + '.\n'
@@ -437,10 +439,10 @@ def validate_isol_cpus(dict_cpus, isol_cpus_env, host_cpus, numa_nodes):
 # Validation for kernel args
 def validate_kernel_args(deployed_kernel_args, derived_kernel_args):
     msg = ('expected: default_hugepagesz=' + derived_kernel_args['default_hugepagesz'] +
-           ' hugepages='+ derived_kernel_args['hugepagesz'] +
-           ' hugepages=' + derived_kernel_args['hugepages'] +
-           ' intel_iommu=' + derived_kernel_args['intel_iommu'] + 
-           ' iommu=' + derived_kernel_args['iommu'] + '\n')
+           '\n hugepages='+ derived_kernel_args['hugepagesz'] +
+           '\n hugepages=' + derived_kernel_args['hugepages'] +
+           '\n intel_iommu=' + derived_kernel_args['intel_iommu'] + 
+           '\n iommu=' + derived_kernel_args['iommu'] + '\n')
     if (derived_kernel_args['intel_iommu'] == deployed_kernel_args['intel_iommu'] and
         derived_kernel_args['default_hugepagesz'] == deployed_kernel_args['default_hugepagesz'] and
         derived_kernel_args['hugepagesz'] == deployed_kernel_args['hugepagesz'] and
@@ -477,9 +479,9 @@ def validation_messages(deployed, hiera, messages):
     t.add_row(['NovaVcpuPinSet', deployed['NovaVcpuPinSet'], hiera['NovaVcpuPinSet'], messages['nova_cpus']])
     t.add_row(['HostIsolatedCoreList', deployed['HostIsolatedCoreList'], 'NA', messages['isol_cpus']])
     deployed_kernel_args = deployed['ComputeKernelArgs']
-    kernel_args = ('default_hugepagesz=' + deployed_kernel_args['default_hugepagesz'] +
-           ' hugepages='+ deployed_kernel_args['hugepagesz'] +
-           ' hugepages=' + deployed_kernel_args['hugepages'] +
+    kernel_args = ('default_hugepagesz=' + deployed_kernel_args['default_hugepagesz'] + '\n' +
+           ' hugepages='+ deployed_kernel_args['hugepagesz'] + '\n' +
+           ' hugepages=' + deployed_kernel_args['hugepages'] + '\n' +
            ' intel_iommu='+ deployed_kernel_args['intel_iommu'])
     t.add_row(['ComputeKernelArgs', kernel_args, 'NA', messages['kernel_args']])
     mem_channels_msg = 'Recommended value is "4" but it should be configured based on hardware spec.'
