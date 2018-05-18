@@ -1,3 +1,4 @@
+import argparse
 import json
 import math
 import os
@@ -102,6 +103,18 @@ def get_numa_nodes(client):
     return nodes
 
 
+# Gets the installed osp release.
+def get_osp_release(client):
+    cmd = 'sudo cat /etc/rhosp-release | grep -v ^#'
+    stdin, stdout, stderr = client.exec_command(cmd)
+    output = str(stdout.read())
+    if output:
+        return output
+    else:
+        msg = "Unable to determine 'OVS Version'"
+        raise Exception(msg)
+
+
 # Gets the CPU model
 def get_cpu_model(client):
     cmd ="sudo lscpu | grep 'Model name'"
@@ -134,7 +147,7 @@ def get_kernel_args(client, hugepage_alloc_perc):
         raise Exception("default huge page size 1GB is not supported")
 
     total_memory = get_physical_memory(client)
-    hugepages = int(float((total_memory / 1024) - 4) * (float(hugepage_alloc_perc) / float(100)))
+    hugepages = int(float((total_memory / 1024) - 4) * (hugepage_alloc_perc / float(100)))
     iommu_info = ''
     cpu_model = get_cpu_model(client)
     if cpu_model.startswith('Intel'):
@@ -204,19 +217,6 @@ def convert_range_to_number_list(range_list):
     return [num for num in num_list if num not in exclude_num_list]
 
 
-# Validates the user inputs
-def vaildate_user_input(user_input):
-    print(json.dumps(user_input))
-
-    if not 'flavor' in user_input.keys():
-        raise Exception("Flavor is missing in user input!");
-
-    for key in user_input.keys():
-        if not key in ['flavor',
-                       'huge_page_allocation_percentage']:
-            raise Exception("Invalid user input '%(key)s'" % {'key': key})
-
-
 # gets the instance UUID by node UUID
 def get_instance_uuid(node_uuid):
     instance_uuid = ''
@@ -238,10 +238,22 @@ def get_host_ip(instance_uuid):
     return host_ip
 
 
+# returns whether containers based overcloud deployment.
+def is_containers_based_deployment(client):
+    containers_based_deployment = False
+    cmd = 'ls -d /var/lib/kolla/config_files/'
+    stdin, stdout, stderr = client.exec_command(cmd)
+    if not str(stderr.read()):
+        containers_based_deployment = True
+    return containers_based_deployment
+
+
 # gets the nova reserved host memory from deployed env.
-def get_nova_reserved_host_mem_from_env(client):
+def get_nova_reserved_host_mem_from_env(client, containers_based_dep):
     nova_reserved_host_mem = 0
     cmd = 'sudo cat /etc/nova/nova.conf | grep "reserved_host_memory_mb" | grep -v ^#'
+    if containers_based_dep:
+        cmd = 'sudo cat /var/lib/config-data/nova_libvirt/etc/nova/nova.conf | grep "reserved_host_memory_mb" | grep -v ^#'
     stdin, stdout, stderr = client.exec_command(cmd)
     mem = str(stdout.read()).replace('reserved_host_memory_mb=', '').strip(' \"\n')
     nova_reserved_host_mem = int(mem)
@@ -249,37 +261,70 @@ def get_nova_reserved_host_mem_from_env(client):
 
 
 # gets the nova reserved host memory from hiera.
-def get_nova_reserved_host_mem_from_hiera(client):
+def get_nova_reserved_host_mem_from_hiera(client, containers_based_dep):
     nova_reserved_host_mem = 0
-    cmd = 'sudo cat /etc/puppet/hieradata/service_configs.yaml | grep "nova::compute::reserved_host_memory" | grep -v ^#'
-    stdin, stdout, stderr = client.exec_command(cmd)
-    mem = str(stdout.read()).replace('nova::compute::reserved_host_memory:', '').strip(' \"\n')
-    nova_reserved_host_mem = int(mem)
+    cmd = ''
+    if containers_based_dep:
+        cmd = 'sudo cat /etc/puppet/hieradata/service_configs.json'
+        stdin, stdout, stderr = client.exec_command(cmd)
+        hiera_json = json.loads(str(stdout.read()))
+        nova_reserved_host_mem = hiera_json["nova::compute::reserved_host_memory"]
+    else:
+        cmd = 'sudo cat /etc/puppet/hieradata/service_configs.yaml | grep "nova::compute::reserved_host_memory" | grep -v ^#' 
+        stdin, stdout, stderr = client.exec_command(cmd)
+        mem = str(stdout.read()).replace('nova::compute::reserved_host_memory:', '').strip(' \"\n')
+        nova_reserved_host_mem = int(mem)
     return nova_reserved_host_mem
 
 
 # gets the nova cpus from deployed env
-def get_nova_cpus_from_env(client):
+def get_nova_cpus_from_env(client, containers_based_dep):
     nova_cpus = ''
     cmd = 'sudo cat /etc/nova/nova.conf | grep "vcpu_pin_set" | grep -v ^#'
+    if containers_based_dep:
+        cmd = 'sudo cat /var/lib/config-data/nova_libvirt/etc/nova/nova.conf | grep "vcpu_pin_set" | grep -v ^#'
     stdin, stdout, stderr = client.exec_command(cmd)
     nova_cpus = str(stdout.read()).replace('vcpu_pin_set=', '').strip(' \"\n')
     return nova_cpus
 
 
 # gets the nova cpus from hiera data
-def get_nova_cpus_from_hiera(client):
+def get_nova_cpus_from_hiera(client, containers_based_dep):
     nova_cpus = ''
-    cmd = 'sudo cat /etc/puppet/hieradata/service_configs.yaml | grep -v ^#'
-    stdin, stdout, stderr = client.exec_command(cmd)
-    for line in str(stdout.read()).split('\n'):
-        if 'nova::compute::vcpu_pin_set:' in line and '[' in line:
-            nova_cpus = line.replace('nova::compute::vcpu_pin_set:', '').strip(' ')
-        elif 'nova::compute::vcpu_pin_set:' in line and '[' not in line:
-            nova_cpus = line.replace('nova::compute::vcpu_pin_set:', '').strip(' ')
-        elif '[' in nova_cpus and ']' not in nova_cpus:
-             nova_cpus += line.strip(' ')
+    cmd = ''
+    if containers_based_dep:
+        cmd = 'sudo cat /etc/puppet/hieradata/service_configs.json'
+        stdin, stdout, stderr = client.exec_command(cmd)
+        hiera_json = json.loads(str(stdout.read()))
+        nova_cpus = hiera_json["nova::compute::vcpu_pin_set"]
+        if nova_cpus:
+            nova_cpus = "\'" + nova_cpus + "\'"
+    else:
+        cmd = 'sudo cat /etc/puppet/hieradata/service_configs.yaml | grep -v ^#'
+        stdin, stdout, stderr = client.exec_command(cmd)
+        for line in str(stdout.read()).split('\n'):
+            if 'nova::compute::vcpu_pin_set:' in line and '[' in line:
+                nova_cpus = line.replace('nova::compute::vcpu_pin_set:', '').strip(' ')
+            elif 'nova::compute::vcpu_pin_set:' in line and '[' not in line:
+                nova_cpus = line.replace('nova::compute::vcpu_pin_set:', '').strip(' ')
+            elif '[' in nova_cpus and ']' not in nova_cpus:
+                nova_cpus += line.strip(' ')
     return nova_cpus
+
+
+# gets the kernel args from deployed env
+def get_grub_update_status_from_env(client):
+    grub_update_status = False
+    cmd = 'sudo sudo cat /proc/cmdline | grep -v ^#'
+    stdin, stdout, stderr = client.exec_command(cmd)
+    cmd_line = str(stdout.read())
+    if cmd_line:
+        cmd_args = cmd_line.split(' ')
+        for arg in cmd_args:
+            if ('hugepages' in arg or 'intel_iommu'in arg or
+                'iommu' in arg):
+                grub_update_status = True
+    return grub_update_status
 
 
 # gets the host isolated cpus from deployed env.
@@ -295,9 +340,11 @@ def get_host_isolated_cpus_from_env(client):
 
 
 # gets the kernel args from deployed env
-def get_kernel_args_from_env(client):
+def get_kernel_args_from_env(client, containers_based_dep):
     kernel_args = {}
     cmd = 'sudo cat /etc/default/grub | grep "GRUB_CMDLINE_LINUX=" | grep -v ^#'
+    if containers_based_dep:
+        cmd = 'sudo cat /etc/default/grub | grep "TRIPLEO_HEAT_TEMPLATE_KERNEL_ARGS" | grep -v ^#'
     stdin, stdout, stderr = client.exec_command(cmd)
     cmd_line = str(stdout.read()).replace('GRUB_CMDLINE_LINUX=', '').strip(' \"\n')
     if cmd_line:
@@ -311,13 +358,16 @@ def get_kernel_args_from_env(client):
 
 
 # gets the SRIOV parameters value from deployed env
-def get_parameters_value_from_env(client, host_ip):
+def get_parameters_value_from_env(client,
+                                  containers_based_dep,
+                                  host_ip):
     deployed_parameters = {}
     print('Collects the deployed value for parameters from node: %s' % host_ip)
-    nova_reserved_host_mem = get_nova_reserved_host_mem_from_env(client)
-    nova_cpus = get_nova_cpus_from_env(client)
+    nova_reserved_host_mem = get_nova_reserved_host_mem_from_env(client,
+                                                                 containers_based_dep)
+    nova_cpus = get_nova_cpus_from_env(client, containers_based_dep)
     host_isolated_cpus = get_host_isolated_cpus_from_env(client)
-    kernel_args = get_kernel_args_from_env(client)
+    kernel_args = get_kernel_args_from_env(client, containers_based_dep)
     if not '[' in nova_cpus:
         nova_cpus = '\'' + nova_cpus + '\''
     deployed_parameters['NovaVcpuPinSet'] = nova_cpus
@@ -328,11 +378,14 @@ def get_parameters_value_from_env(client, host_ip):
 
 
 # gets the SRIOV parameters value from deployed env
-def get_parameters_value_from_hiera(client, host_ip):
+def get_parameters_value_from_hiera(client,
+                                    containers_based_dep,
+                                    host_ip):
     hiera_parameters = {}
     print('Collects the hiera value for parameters from node: %s' % host_ip)
-    nova_reserved_host_mem = get_nova_reserved_host_mem_from_hiera(client)
-    nova_cpus = get_nova_cpus_from_hiera(client)
+    nova_reserved_host_mem = get_nova_reserved_host_mem_from_hiera(client,
+                                                                   containers_based_dep)
+    nova_cpus = get_nova_cpus_from_hiera(client, containers_based_dep)
     hiera_parameters['NovaVcpuPinSet'] = nova_cpus
     hiera_parameters['NovaReservedHostMemory'] = nova_reserved_host_mem
     return hiera_parameters
@@ -374,7 +427,7 @@ def validate_nova_reserved_host_memory(nova_reserved_host_mem_env):
 
 # Validation for nova cpus
 def validate_nova_cpus(dict_cpus, nova_cpus_env, host_cpus, numa_nodes):
-    msg = ''
+    msg = 'valid.\n'
     nova_cores = []
     nova_cpus = convert_range_to_number_list(nova_cpus_env)
     host_cpus = host_cpus.strip('\"\' ').split(',')
@@ -406,7 +459,7 @@ def validate_nova_cpus(dict_cpus, nova_cpus_env, host_cpus, numa_nodes):
 
 # Validation for host isolated cpus
 def validate_isol_cpus(dict_cpus, isol_cpus_env, host_cpus, numa_nodes):
-    msg = ''
+    msg = 'valid.\n'
     isol_cores = []
     isol_cpus = convert_range_to_number_list(isol_cpus_env)
     host_cpus = host_cpus.strip('\"\' ').split(',')
@@ -437,7 +490,7 @@ def validate_isol_cpus(dict_cpus, isol_cpus_env, host_cpus, numa_nodes):
 
 
 # Validation for kernel args
-def validate_kernel_args(deployed_kernel_args, derived_kernel_args):
+def validate_kernel_args(deployed_kernel_args, derived_kernel_args, grub_update_status):
     msg = ('expected: default_hugepagesz=' + derived_kernel_args['default_hugepagesz'] +
            '\n hugepages='+ derived_kernel_args['hugepagesz'] +
            '\n hugepages=' + derived_kernel_args['hugepages'] +
@@ -448,13 +501,30 @@ def validate_kernel_args(deployed_kernel_args, derived_kernel_args):
         derived_kernel_args['hugepagesz'] == deployed_kernel_args['hugepagesz'] and
         derived_kernel_args['hugepages'] == deployed_kernel_args['hugepages']):
         msg = "valid.\n"
+    if not grub_update_status:
+        msg += "node is not restarted.\n"
     return msg
+
+
+# Gets osp parameters name in different osp releases
+def get_osp_params_name(client):
+    osp_params = {}
+    osp_release = get_osp_release(client)
+    if ('10' in osp_release or '11' in osp_release):
+        osp_params['isol_cpus'] = 'HostIsolatedCoreList'
+        osp_params['kernel_args'] = 'ComputeKernelArgs'
+    else:
+        osp_params['isol_cpus'] = 'IsolCpusList'
+        osp_params['kernel_args'] = 'KernelArgs'
+    return osp_params
 
 
 # Validates the SRIOV parameters
 def validate_sriov_parameters(client, deployed, hiera, node_uuid,
                               hugepage_alloc_perc):
     messages = {}
+    osp_params = get_osp_params_name(client)
+
     dict_cpus = get_nodes_cores_info(client)
     cpus = list(dict_cpus.values())
     numa_nodes = get_numa_nodes(client)
@@ -464,12 +534,15 @@ def validate_sriov_parameters(client, deployed, hiera, node_uuid,
                                                host_cpus, numa_nodes) 
     messages['isol_cpus'] = validate_isol_cpus(dict_cpus, deployed['HostIsolatedCoreList'], host_cpus, numa_nodes)
     derived_kernel_args = get_kernel_args(client, hugepage_alloc_perc)
-    messages['kernel_args'] = validate_kernel_args(deployed['ComputeKernelArgs'], derived_kernel_args)
-    validation_messages(deployed, hiera, messages)
+    grub_update_status = get_grub_update_status_from_env(client)
+    messages['kernel_args'] = validate_kernel_args(deployed['ComputeKernelArgs'],
+                                                   derived_kernel_args,
+                                                   grub_update_status)
+    validation_messages(deployed, hiera, osp_params, messages)
 
 
 # Displays validation messages
-def validation_messages(deployed, hiera, messages):
+def validation_messages(deployed, hiera, osp_params, messages):
     t = PrettyTable(['Parameters', 'Deployment Value', 'Hiera Data', 'Validation Messages'])
     t.align["Parameters"] = "l"
     t.align["Deployment Value"] = "l"
@@ -477,13 +550,13 @@ def validation_messages(deployed, hiera, messages):
     t.align["Validation Messages"] = "l"
     t.add_row(['NovaReservedHostMemory', deployed['NovaReservedHostMemory'], hiera['NovaReservedHostMemory'], messages['reserved_host_mem']])
     t.add_row(['NovaVcpuPinSet', deployed['NovaVcpuPinSet'], hiera['NovaVcpuPinSet'], messages['nova_cpus']])
-    t.add_row(['HostIsolatedCoreList', deployed['HostIsolatedCoreList'], 'NA', messages['isol_cpus']])
+    t.add_row([osp_params['isol_cpus'], deployed['HostIsolatedCoreList'], 'NA', messages['isol_cpus']])
     deployed_kernel_args = deployed['ComputeKernelArgs']
     kernel_args = ('default_hugepagesz=' + deployed_kernel_args['default_hugepagesz'] + '\n' +
            ' hugepages='+ deployed_kernel_args['hugepagesz'] + '\n' +
            ' hugepages=' + deployed_kernel_args['hugepages'] + '\n' +
            ' intel_iommu='+ deployed_kernel_args['intel_iommu'])
-    t.add_row(['ComputeKernelArgs', kernel_args, 'NA', messages['kernel_args']])
+    t.add_row([osp_params['kernel_args'], kernel_args, 'NA', messages['kernel_args']])
     mem_channels_msg = 'Recommended value is "4" but it should be configured based on hardware spec.'
     print(t)
 
@@ -491,16 +564,11 @@ def validation_messages(deployed, hiera, messages):
 # Gets environment parameters value and validates.
 def validate():
    try:
-        user_input= get_args(sys.argv)
+        opts = parse_opts(sys.argv)
         print("Validating user inputs..")
-        if len(user_input.keys()) != 2:
-            raise Exception("Unable to validate post deployment parameters, user "
-                            "inputs format is invalid.")
-
-        vaildate_user_input(user_input)
-        hugepage_alloc_perc = user_input.get(
-            "huge_page_allocation_percentage", 50)
-        node_uuid = get_node_uuid(user_input['flavor'])
+        validate_user_input(opts)
+        hugepage_alloc_perc = float(opts.huge_page_allocation_percentage)
+        node_uuid = get_node_uuid(opts.flavor)
         instance_uuid = get_instance_uuid(node_uuid)
         host_ip = get_host_ip(instance_uuid)
         # SSH access
@@ -509,9 +577,13 @@ def validate():
         client.load_system_host_keys()
         client.connect(host_ip, username='heat-admin')
         client.invoke_shell()
-
-        deployed = get_parameters_value_from_env(client, host_ip)
-        hiera = get_parameters_value_from_hiera(client, host_ip)
+        containers_based_dep = is_containers_based_deployment(client)
+        deployed = get_parameters_value_from_env(client,
+                                                 containers_based_dep,
+                                                 host_ip)
+        hiera = get_parameters_value_from_hiera(client,
+                                                containers_based_dep,
+                                                host_ip)
         validate_sriov_parameters(client, deployed, hiera, node_uuid, 
                                   hugepage_alloc_perc)
         client.close()
@@ -519,18 +591,28 @@ def validate():
         print("Error: %s" % exc)
 
 
+# Validates the user inputs
+def validate_user_input(inputs):
+    print(json.dumps({"flavor": inputs.flavor,
+                      "huge_page_allocation_percentage":int( inputs.huge_page_allocation_percentage)}))
+    if not inputs.flavor:
+        raise Exception("Flavor is missing in user input!");
+
+
 # Gets the user input as dictionary.
-def get_args(argv):
-    args = {}
-    while argv:
-        if argv[0].startswith('--'):
-            if len(argv) == 1 or argv[1].startswith('--'):
-                raise Exception("Unable to validate post deployment parameters, user "
-                                "inputs format is invalid.")
-            else:
-                args[argv[0].strip('- ')] = argv[1].strip(' ')
-        argv = argv[1:] 
-    return args
+def parse_opts(argv):
+    parser = argparse.ArgumentParser(
+        description='Interactive tool')
+    parser.add_argument('-f', '--flavor',
+                        metavar='FLAVOR NAME',
+                        help="""flavor name.""",
+                        default='')
+    parser.add_argument('-m', '--huge_page_allocation_percentage',
+                        metavar='HUGEPAGE ALLOCATION PERCENTAGE',
+                        help="""hugepage allocation percentage""",
+                        default=50)
+    opts = parser.parse_args(argv[1:])
+    return opts
 
 
 if __name__ == '__main__':

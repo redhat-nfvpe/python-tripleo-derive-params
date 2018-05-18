@@ -1,3 +1,4 @@
+import argparse
 import json
 import math
 import os
@@ -198,13 +199,13 @@ def get_dpdk_socket_memory(client, dpdk_nics_numa_info, numa_nodes, minimum_sock
     return "\'"+','.join([str(sm) for sm in dpdk_socket_memory_list])+"\'"
 
 
-# Gets the installed ovs version
-def get_ovs_version(client):
-    cmd = "sudo ovs-vsctl -V | grep ovs-vsctl"
+# Gets the installed osp release.
+def get_osp_release(client):
+    cmd = 'sudo cat /etc/rhosp-release | grep -v ^#'
     stdin, stdout, stderr = client.exec_command(cmd)
     output = str(stdout.read())
-    if output and output.startswith('ovs-vsctl (Open vSwitch)'):
-        return output.replace('ovs-vsctl (Open vSwitch)', '').strip(' \n')
+    if output:
+        return output
     else:
         msg = "Unable to determine 'OVS Version'"
         raise Exception(msg)
@@ -254,7 +255,7 @@ def get_kernel_args(client, hugepage_alloc_perc):
         raise Exception("default huge page size 1GB is not supported")
 
     total_memory = get_physical_memory(client)
-    hugepages = int(float((total_memory / 1024) - 4) * (float(hugepage_alloc_perc) / float(100)))
+    hugepages = int(float((total_memory / 1024) - 4) * (hugepage_alloc_perc / float(100)))
     iommu_info = ''
     cpu_model = get_cpu_model(client)
     if cpu_model.startswith('Intel'):
@@ -324,20 +325,6 @@ def convert_range_to_number_list(range_list):
     return [num for num in num_list if num not in exclude_num_list]
 
 
-# Validates the user inputs
-def vaildate_user_input(user_input):
-    print(json.dumps(user_input))
-
-    if not 'flavor' in user_input.keys():
-        raise Exception("Flavor is missing in user input!");
-
-    for key in user_input.keys():
-        if not key in ['flavor', 'dpdk_nics',
-                       'num_phy_cores_per_numa_node_for_pmd',
-                       'huge_page_allocation_percentage']:
-            raise Exception("Invalid user input '%(key)s'" % {'key': key})
-
-
 # gets the instance UUID by node UUID
 def get_instance_uuid(node_uuid):
     instance_uuid = ''
@@ -359,6 +346,16 @@ def get_host_ip(instance_uuid):
     return host_ip
 
 
+# returns whether containers based overcloud deployment.
+def is_containers_based_deployment(client):
+    containers_based_deployment = False
+    cmd = 'ls -d /var/lib/kolla/config_files/'
+    stdin, stdout, stderr = client.exec_command(cmd)
+    if not str(stderr.read()):
+        containers_based_deployment = True
+    return containers_based_deployment
+
+
 # gets the PMD cpus from deployed env
 def get_pmd_cpus_from_env(client):
     pmd_cpus_list = ''
@@ -371,11 +368,20 @@ def get_pmd_cpus_from_env(client):
 
 
 # gets the PMD cpus from hiera data
-def get_pmd_cpus_from_hiera(client):
+def get_pmd_cpus_from_hiera(client, containers_based_dep):
     pmd_cpus_list = ''
-    cmd = 'sudo cat /etc/puppet/hieradata/service_configs.yaml | grep "vswitch::dpdk::core_list" | grep -v ^#'
-    stdin, stdout, stderr = client.exec_command(cmd)
-    pmd_cpus_list = str(stdout.read()).replace('vswitch::dpdk::core_list:', '').strip(' \"\n')
+    cmd = ''
+    if containers_based_dep:
+        cmd = 'sudo cat /etc/puppet/hieradata/service_configs.json'
+        stdin, stdout, stderr = client.exec_command(cmd)
+        hiera_json = json.loads(str(stdout.read()))
+        pmd_cpus_list = hiera_json["vswitch::dpdk::pmd_core_list"]
+        if pmd_cpus_list:
+            pmd_cpus_list = "\'" + pmd_cpus_list + "\'"
+    else:
+        cmd = 'sudo cat /etc/puppet/hieradata/service_configs.yaml | grep "vswitch::dpdk::core_list" | grep -v ^#'
+        stdin, stdout, stderr = client.exec_command(cmd)
+        pmd_cpus_list = str(stdout.read()).replace('vswitch::dpdk::core_list:', '').strip(' \"\n')
     return pmd_cpus_list
 
 
@@ -400,18 +406,29 @@ def get_dpdk_socket_memory_from_env(client):
 
 
 # gets the DPDK socket memory from hiera data
-def get_dpdk_socket_memory_from_hiera(client):
+def get_dpdk_socket_memory_from_hiera(client, containers_based_dep):
     dpdk_scoket_mem = ''
-    cmd = 'sudo cat /etc/puppet/hieradata/service_configs.yaml | grep "vswitch::dpdk::socket_mem" | grep -v ^#'
-    stdin, stdout, stderr = client.exec_command(cmd)
-    dpdk_scoket_mem = str(stdout.read()).replace('vswitch::dpdk::socket_mem:', '').strip(' \n')
+    cmd = ''
+    if containers_based_dep:
+        cmd = 'sudo cat /etc/puppet/hieradata/service_configs.json'
+        stdin, stdout, stderr = client.exec_command(cmd)
+        hiera_json = json.loads(str(stdout.read()))
+        dpdk_scoket_mem = hiera_json["vswitch::dpdk::socket_mem"]
+        if dpdk_scoket_mem:
+            dpdk_scoket_mem = "\'" + dpdk_scoket_mem + "\'"
+    else:
+        cmd = 'sudo cat /etc/puppet/hieradata/service_configs.yaml | grep "vswitch::dpdk::socket_mem" | grep -v ^#'
+        stdin, stdout, stderr = client.exec_command(cmd)
+        dpdk_scoket_mem = str(stdout.read()).replace('vswitch::dpdk::socket_mem:', '').strip(' \n')
     return dpdk_scoket_mem
 
 
 # gets the nova reserved host memory from deployed env.
-def get_nova_reserved_host_mem_from_env(client):
+def get_nova_reserved_host_mem_from_env(client, containers_based_dep):
     nova_reserved_host_mem = 0
     cmd = 'sudo cat /etc/nova/nova.conf | grep "reserved_host_memory_mb" | grep -v ^#'
+    if containers_based_dep:
+        cmd = 'sudo cat /var/lib/config-data/nova_libvirt/etc/nova/nova.conf | grep "reserved_host_memory_mb" | grep -v ^#'
     stdin, stdout, stderr = client.exec_command(cmd)
     mem = str(stdout.read()).replace('reserved_host_memory_mb=', '').strip(' \"\n')
     nova_reserved_host_mem = int(mem)
@@ -419,36 +436,54 @@ def get_nova_reserved_host_mem_from_env(client):
 
 
 # gets the nova reserved host memory from hiera.
-def get_nova_reserved_host_mem_from_hiera(client):
+def get_nova_reserved_host_mem_from_hiera(client, containers_based_dep):
     nova_reserved_host_mem = 0
-    cmd = 'sudo cat /etc/puppet/hieradata/service_configs.yaml | grep "nova::compute::reserved_host_memory" | grep -v ^#'
-    stdin, stdout, stderr = client.exec_command(cmd)
-    mem = str(stdout.read()).replace('nova::compute::reserved_host_memory:', '').strip(' \"\n')
-    nova_reserved_host_mem = int(mem)
+    cmd = ''
+    if containers_based_dep:
+        cmd = 'sudo cat /etc/puppet/hieradata/service_configs.json'
+        stdin, stdout, stderr = client.exec_command(cmd)
+        hiera_json = json.loads(str(stdout.read()))
+        nova_reserved_host_mem = hiera_json["nova::compute::reserved_host_memory"]
+    else:
+        cmd = 'sudo cat /etc/puppet/hieradata/service_configs.yaml | grep "nova::compute::reserved_host_memory" | grep -v ^#' 
+        stdin, stdout, stderr = client.exec_command(cmd)
+        mem = str(stdout.read()).replace('nova::compute::reserved_host_memory:', '').strip(' \"\n')
+        nova_reserved_host_mem = int(mem)
     return nova_reserved_host_mem
 
 
 # gets the nova cpus from deployed env
-def get_nova_cpus_from_env(client):
+def get_nova_cpus_from_env(client, containers_based_dep):
     nova_cpus = ''
     cmd = 'sudo cat /etc/nova/nova.conf | grep "vcpu_pin_set" | grep -v ^#'
+    if containers_based_dep:
+        cmd = 'sudo cat /var/lib/config-data/nova_libvirt/etc/nova/nova.conf | grep "vcpu_pin_set" | grep -v ^#'
     stdin, stdout, stderr = client.exec_command(cmd)
     nova_cpus = str(stdout.read()).replace('vcpu_pin_set=', '').strip(' \"\n')
     return nova_cpus
 
 
 # gets the nova cpus from hiera data
-def get_nova_cpus_from_hiera(client):
+def get_nova_cpus_from_hiera(client, containers_based_dep):
     nova_cpus = ''
-    cmd = 'sudo cat /etc/puppet/hieradata/service_configs.yaml | grep -v ^#'
-    stdin, stdout, stderr = client.exec_command(cmd)
-    for line in str(stdout.read()).split('\n'):
-        if 'nova::compute::vcpu_pin_set:' in line and '[' in line:
-            nova_cpus = line.replace('nova::compute::vcpu_pin_set:', '').strip(' ')
-        elif 'nova::compute::vcpu_pin_set:' in line and '[' not in line:
-            nova_cpus = line.replace('nova::compute::vcpu_pin_set:', '').strip(' ')
-        elif '[' in nova_cpus and ']' not in nova_cpus:
-             nova_cpus += line.strip(' ')
+    cmd = ''
+    if containers_based_dep:
+        cmd = 'sudo cat /etc/puppet/hieradata/service_configs.json'
+        stdin, stdout, stderr = client.exec_command(cmd)
+        hiera_json = json.loads(str(stdout.read()))
+        nova_cpus = hiera_json["nova::compute::vcpu_pin_set"]
+        if nova_cpus:
+            nova_cpus = "\'" + nova_cpus + "\'"
+    else:
+        cmd = 'sudo cat /etc/puppet/hieradata/service_configs.yaml | grep -v ^#'
+        stdin, stdout, stderr = client.exec_command(cmd)
+        for line in str(stdout.read()).split('\n'):
+            if 'nova::compute::vcpu_pin_set:' in line and '[' in line:
+                nova_cpus = line.replace('nova::compute::vcpu_pin_set:', '').strip(' ')
+            elif 'nova::compute::vcpu_pin_set:' in line and '[' not in line:
+                nova_cpus = line.replace('nova::compute::vcpu_pin_set:', '').strip(' ')
+            elif '[' in nova_cpus and ']' not in nova_cpus:
+                nova_cpus += line.strip(' ')
     return nova_cpus
 
 
@@ -477,18 +512,29 @@ def get_dpdk_mem_channels_from_env(client):
 
 
 # gets the DPDK memory channels from hiera data.
-def get_dpdk_mem_channels_from_hiera(client):
+def get_dpdk_mem_channels_from_hiera(client, containers_based_dep):
     dpdk_mem_channels = '4'
-    cmd = 'sudo cat /etc/puppet/hieradata/service_configs.yaml | grep "vswitch::dpdk::memory_channels" | grep -v ^#'
-    stdin, stdout, stderr = client.exec_command(cmd)
-    dpdk_mem_channels = str(stdout.read()).replace('vswitch::dpdk::memory_channels:', '').strip(' \n')
+    cmd = ''
+    if containers_based_dep:
+        cmd = 'sudo cat /etc/puppet/hieradata/service_configs.json'
+        stdin, stdout, stderr = client.exec_command(cmd)
+        hiera_json = json.loads(str(stdout.read()))
+        dpdk_mem_channels = hiera_json["vswitch::dpdk::memory_channels"]
+        if dpdk_mem_channels:
+            dpdk_mem_channels = "\'" + dpdk_mem_channels + "\'"
+    else:
+        cmd = 'sudo cat /etc/puppet/hieradata/service_configs.yaml | grep "vswitch::dpdk::memory_channels" | grep -v ^#'
+        stdin, stdout, stderr = client.exec_command(cmd)
+        dpdk_mem_channels = str(stdout.read()).replace('vswitch::dpdk::memory_channels:', '').strip(' \n')
     return dpdk_mem_channels
 
 
 # gets the kernel args from deployed env
-def get_kernel_args_from_env(client):
+def get_kernel_args_from_env(client, containers_based_dep):
     kernel_args = {}
     cmd = 'sudo cat /etc/default/grub | grep "GRUB_CMDLINE_LINUX=" | grep -v ^#'
+    if containers_based_dep:
+        cmd = 'sudo cat /etc/default/grub | grep "TRIPLEO_HEAT_TEMPLATE_KERNEL_ARGS" | grep -v ^#'
     stdin, stdout, stderr = client.exec_command(cmd)
     cmd_line = str(stdout.read()).replace('GRUB_CMDLINE_LINUX=', '').strip(' \"\n')
     if cmd_line:
@@ -499,6 +545,21 @@ def get_kernel_args_from_env(client):
                 boot_param = arg.split('=')
                 kernel_args[boot_param[0]] = boot_param[1]
     return kernel_args
+
+
+# gets the kernel args from deployed env
+def get_grub_update_status_from_env(client):
+    grub_update_status = False
+    cmd = 'sudo sudo cat /proc/cmdline | grep -v ^#'
+    stdin, stdout, stderr = client.exec_command(cmd)
+    cmd_line = str(stdout.read())
+    if cmd_line:
+        cmd_args = cmd_line.split(' ')
+        for arg in cmd_args:
+            if ('hugepages' in arg or 'intel_iommu'in arg or
+                'iommu' in arg):
+                grub_update_status = True
+    return grub_update_status
 
 
 # gets the cpus list from mask value
@@ -517,17 +578,20 @@ def get_cpus_list_from_mask_value(mask_val):
 
 
 # gets the DPDK parameters value from deployed env
-def get_parameters_value_from_env(client, host_ip):
+def get_parameters_value_from_env(client,
+                                  containers_based_dep,
+                                  host_ip):
     deployed_parameters = {}
     print('Collects the deployed value for parameters from node: %s' % host_ip)
     pmd_cpus_list = get_pmd_cpus_from_env(client)
     host_cpus_list = get_host_cpus_from_env(client)
     dpdk_socket_mem = get_dpdk_socket_memory_from_env(client)
-    nova_reserved_host_mem = get_nova_reserved_host_mem_from_env(client)
-    nova_cpus = get_nova_cpus_from_env(client)
+    nova_reserved_host_mem = get_nova_reserved_host_mem_from_env(client,
+                                                                 containers_based_dep)
+    nova_cpus = get_nova_cpus_from_env(client, containers_based_dep)
     host_isolated_cpus = get_host_isolated_cpus_from_env(client)
     dpdk_mem_channels = get_dpdk_mem_channels_from_env(client)
-    kernel_args = get_kernel_args_from_env(client)
+    kernel_args = get_kernel_args_from_env(client, containers_based_dep)
     tuned = get_tuned_active_profile(client)
     deployed_parameters['NeutronDpdkCoreList'] = '\'' + pmd_cpus_list + '\''
     deployed_parameters['HostCpusList'] = '\'' + host_cpus_list + '\''
@@ -544,14 +608,16 @@ def get_parameters_value_from_env(client, host_ip):
 
 
 # gets the DPDK parameters value from deployed env
-def get_parameters_value_from_hiera(client, host_ip):
+def get_parameters_value_from_hiera(client, containers_based_dep, host_ip):
     hiera_parameters = {}
     print('Collects the hiera value for parameters from node: %s' % host_ip)
-    pmd_cpus_list = get_pmd_cpus_from_hiera(client)
-    dpdk_socket_mem = get_dpdk_socket_memory_from_hiera(client)
-    nova_reserved_host_mem = get_nova_reserved_host_mem_from_hiera(client)
-    nova_cpus = get_nova_cpus_from_hiera(client)
-    dpdk_mem_channels = get_dpdk_mem_channels_from_hiera(client)
+    pmd_cpus_list = get_pmd_cpus_from_hiera(client, containers_based_dep)
+    dpdk_socket_mem = get_dpdk_socket_memory_from_hiera(client,
+                                                        containers_based_dep)
+    nova_reserved_host_mem = get_nova_reserved_host_mem_from_hiera(client,
+                                                                   containers_based_dep)
+    nova_cpus = get_nova_cpus_from_hiera(client, containers_based_dep)
+    dpdk_mem_channels = get_dpdk_mem_channels_from_hiera(client, containers_based_dep)
     hiera_parameters['NeutronDpdkCoreList'] =  pmd_cpus_list
     hiera_parameters['NeutronDpdkSocketMemory'] = dpdk_socket_mem
     hiera_parameters['NeutronDpdkMemoryChannels'] =  dpdk_mem_channels
@@ -612,7 +678,7 @@ def get_dpdk_nics_numa_nodes(dpdk_nics_numa_info):
 # Validation for DPDK core list (PMD cores)
 def validate_dpdk_core_list(dict_cpus, dpdk_core_list, host_cpus,
                             numa_nodes, dpdk_nics_numa_nodes, dpdk_nic_numa_cores_count):
-    msg = ''
+    msg = 'valid.\n'
     dpdk_cores = []
     dpdk_cpus = dpdk_core_list.strip('\"\' ').split(',')
     host_cpus = host_cpus.strip('\"\' ').split(',')
@@ -653,7 +719,7 @@ def validate_dpdk_core_list(dict_cpus, dpdk_core_list, host_cpus,
 # Validation for host cpus list
 def validate_host_cpus(host_cpus_env, host_cpus):
     msg = 'expected: ' + host_cpus + '.\n'
-    if host_cpus == host_cpus_env:
+    if host_cpus.strip('\'"') == host_cpus_env.strip('\'"'):
         msg = 'valid.\n'
     return msg
 
@@ -685,7 +751,7 @@ def validate_nova_reserved_host_memory(nova_reserved_host_mem_env):
 
 # Validation for nova cpus
 def validate_nova_cpus(dict_cpus, nova_cpus_env, dpdk_cpus_env, host_cpus, numa_nodes):
-    msg = ''
+    msg = 'valid.\n'
     nova_cores = []
     nova_cpus = convert_range_to_number_list(nova_cpus_env)
     dpdk_cpus = dpdk_cpus_env.strip('\"\' ').split(',')
@@ -723,7 +789,7 @@ def validate_nova_cpus(dict_cpus, nova_cpus_env, dpdk_cpus_env, host_cpus, numa_
 
 # Validation for host isolated cpus
 def validate_isol_cpus(dict_cpus, isol_cpus_env, host_cpus, numa_nodes):
-    msg = ''
+    msg = 'valid.\n'
     isol_cores = []
     isol_cpus = convert_range_to_number_list(isol_cpus_env)
     host_cpus = host_cpus.strip('\"\' ').split(',')
@@ -754,7 +820,7 @@ def validate_isol_cpus(dict_cpus, isol_cpus_env, host_cpus, numa_nodes):
 
 
 # Validation for kernel args
-def validate_kernel_args(deployed_kernel_args, derived_kernel_args):
+def validate_kernel_args(deployed_kernel_args, derived_kernel_args, grub_update_status):
     msg = ('expected: default_hugepagesz=' + derived_kernel_args['default_hugepagesz'] +
            '\n hugepages='+ derived_kernel_args['hugepagesz'] +
            '\n hugepages=' + derived_kernel_args['hugepages'] +
@@ -765,32 +831,34 @@ def validate_kernel_args(deployed_kernel_args, derived_kernel_args):
         derived_kernel_args['hugepagesz'] == deployed_kernel_args['hugepagesz'] and
         derived_kernel_args['hugepages'] == deployed_kernel_args['hugepages']):
         msg = "valid.\n"
+    if not grub_update_status:
+        msg += "node is not restarted.\n"
     return msg
 
-# Gets ovs parameters name in different ovs versions
-def get_ovs_params_name(client):
-    ovs_params = {}
-    ovs_version = get_ovs_version(client)
-    if (ovs_version.startswith('2.5') or ovs_version.startswith('2.6') or ovs_version.startswith('2.7')):
-        ovs_params['dpdk_cpus'] = 'NeutronDpdkCoreList'
-        ovs_params['socket_mem'] = 'NeutronDpdkSocketMemory'
-        ovs_params['isol_cpus'] = 'HostIsolatedCoreList'
-        ovs_params['mem_channels'] = 'NeutronDpdkMemoryChannels'
-        ovs_params['kernel_args'] = 'ComputeKernelArgs'
+# Gets osp parameters name in different osp releases.
+def get_osp_params_name(client):
+    osp_params = {}
+    osp_release = get_osp_release(client)
+    if ('10' in osp_release or '11' in osp_release):
+        osp_params['dpdk_cpus'] = 'NeutronDpdkCoreList'
+        osp_params['socket_mem'] = 'NeutronDpdkSocketMemory'
+        osp_params['isol_cpus'] = 'HostIsolatedCoreList'
+        osp_params['mem_channels'] = 'NeutronDpdkMemoryChannels'
+        osp_params['kernel_args'] = 'ComputeKernelArgs'
     else:
-        ovs_params['dpdk_cpus'] = 'OvsPmdCoreList'
-        ovs_params['socket_mem'] = 'OvsDpdkSocketMemory'
-        ovs_params['isol_cpus'] = 'IsolCpusList'
-        ovs_params['mem_channels'] = 'OvsDpdkMemoryChannels'
-        ovs_params['kernel_args'] = 'KernelArgs'
-    return ovs_params
+        osp_params['dpdk_cpus'] = 'OvsPmdCoreList'
+        osp_params['socket_mem'] = 'OvsDpdkSocketMemory'
+        osp_params['isol_cpus'] = 'IsolCpusList'
+        osp_params['mem_channels'] = 'OvsDpdkMemoryChannels'
+        osp_params['kernel_args'] = 'KernelArgs'
+    return osp_params
 
 
 # Validates the DPDK parameters
 def validate_dpdk_parameters(client, deployed, hiera, node_uuid, dpdk_nic_numa_cores_count,
                           hugepage_alloc_perc):
     messages = {}
-    ovs_params = get_ovs_params_name(client)
+    osp_params = get_osp_params_name(client)
 
     dict_cpus = get_nodes_cores_info(client)
     cpus = list(dict_cpus.values())
@@ -810,32 +878,35 @@ def validate_dpdk_parameters(client, deployed, hiera, node_uuid, dpdk_nic_numa_c
                                                deployed['NeutronDpdkCoreList'], host_cpus, numa_nodes) 
     messages['isol_cpus'] = validate_isol_cpus(dict_cpus, deployed['HostIsolatedCoreList'], host_cpus, numa_nodes)
     derived_kernel_args = get_kernel_args(client, hugepage_alloc_perc)
-    messages['kernel_args'] = validate_kernel_args(deployed['ComputeKernelArgs'], derived_kernel_args)
+    grub_update_status = get_grub_update_status_from_env(client)
+    messages['kernel_args'] = validate_kernel_args(deployed['ComputeKernelArgs'],
+                                                   derived_kernel_args,
+                                                   grub_update_status)
     messages['tuned'] = validate_tuned_status(deployed['tuned'])
-    validation_messages(deployed, hiera, ovs_params, messages)
+    validation_messages(deployed, hiera, osp_params, messages)
 
 
 # Displays validation messages
-def validation_messages(deployed, hiera, ovs_params, messages):
+def validation_messages(deployed, hiera, osp_params, messages):
     t = PrettyTable(['Parameters', 'Deployment Value', 'Hiera Data', 'Validation Messages'])
     t.align["Parameters"] = "l"
     t.align["Deployment Value"] = "l"
     t.align["Hiera Data"] ="l"
     t.align["Validation Messages"] = "l"
     t.add_row(['HostCpusList', deployed['HostCpusList'], 'NA', messages['host_cpus']]) 
-    t.add_row([ovs_params['dpdk_cpus'], deployed['NeutronDpdkCoreList'], hiera['NeutronDpdkCoreList'], messages['dpdk_cpus']])
-    t.add_row([ovs_params['socket_mem'], deployed['NeutronDpdkSocketMemory'], hiera['NeutronDpdkSocketMemory'], messages['socket_mem']])
+    t.add_row([osp_params['dpdk_cpus'], deployed['NeutronDpdkCoreList'], hiera['NeutronDpdkCoreList'], messages['dpdk_cpus']])
+    t.add_row([osp_params['socket_mem'], deployed['NeutronDpdkSocketMemory'], hiera['NeutronDpdkSocketMemory'], messages['socket_mem']])
     t.add_row(['NovaReservedHostMemory', deployed['NovaReservedHostMemory'], hiera['NovaReservedHostMemory'], messages['reserved_host_mem']])
     t.add_row(['NovaVcpuPinSet', deployed['NovaVcpuPinSet'], hiera['NovaVcpuPinSet'], messages['nova_cpus']])
-    t.add_row([ovs_params['isol_cpus'], deployed['HostIsolatedCoreList'], 'NA', messages['isol_cpus']])
+    t.add_row([osp_params['isol_cpus'], deployed['HostIsolatedCoreList'], 'NA', messages['isol_cpus']])
     deployed_kernel_args = deployed['ComputeKernelArgs']
     kernel_args = ('default_hugepagesz=' + deployed_kernel_args['default_hugepagesz'] + '\n'+
            ' hugepages='+ deployed_kernel_args['hugepagesz'] + '\n' +
            ' hugepages=' + deployed_kernel_args['hugepages'] + '\n' +
            ' intel_iommu='+ deployed_kernel_args['intel_iommu'])
-    t.add_row([ovs_params['kernel_args'], kernel_args, 'NA', messages['kernel_args']])
-    mem_channels_msg = 'Recommended value is "4" but it should be configured based on hardware spec.'
-    t.add_row([ovs_params['mem_channels'], deployed['NeutronDpdkMemoryChannels'], hiera['NeutronDpdkMemoryChannels'], mem_channels_msg])
+    t.add_row([osp_params['kernel_args'], kernel_args, 'NA', messages['kernel_args']])
+    mem_channels_msg = 'Recommended value is "4" but it should be configured based on hardware spec.\n'
+    t.add_row([osp_params['mem_channels'], deployed['NeutronDpdkMemoryChannels'], hiera['NeutronDpdkMemoryChannels'], mem_channels_msg])
     t.add_row(['tuned', deployed['tuned'], 'NA', messages['tuned']])
     print(t)
 
@@ -843,18 +914,12 @@ def validation_messages(deployed, hiera, ovs_params, messages):
 # Gets environment parameters value and validates.
 def validate():
    try:
-        user_input= get_args(sys.argv)
+        opts = parse_opts(sys.argv)
         print("Validating user inputs..")
-        if len(user_input.keys()) != 3:
-            raise Exception("Unable to validate post deployment parameters, user "
-                            "inputs format is invalid.")
-
-        vaildate_user_input(user_input)
-        dpdk_nic_numa_cores_count = user_input.get(
-            "num_phy_cores_per_numa_node_for_pmd", 1)
-        hugepage_alloc_perc = user_input.get(
-            "huge_page_allocation_percentage", 50)
-        node_uuid = get_node_uuid(user_input['flavor'])
+        validate_user_input(opts)
+        dpdk_nic_numa_cores_count = int(opts.num_phy_cores_per_numa_node_for_pmd)
+        hugepage_alloc_perc = float(opts.huge_page_allocation_percentage)
+        node_uuid = get_node_uuid(opts.flavor)
         instance_uuid = get_instance_uuid(node_uuid)
         host_ip = get_host_ip(instance_uuid)
         # SSH access
@@ -863,9 +928,13 @@ def validate():
         client.load_system_host_keys()
         client.connect(host_ip, username='heat-admin')
         client.invoke_shell()
-
-        deployed = get_parameters_value_from_env(client, host_ip)
-        hiera = get_parameters_value_from_hiera(client, host_ip)
+        containers_based_dep = is_containers_based_deployment(client)
+        deployed = get_parameters_value_from_env(client,
+                                                 containers_based_dep,
+                                                 host_ip)
+        hiera = get_parameters_value_from_hiera(client,
+                                                containers_based_dep,
+                                                host_ip)
         validate_dpdk_parameters(client, deployed, hiera, node_uuid, 
             dpdk_nic_numa_cores_count, hugepage_alloc_perc)
         client.close()
@@ -873,18 +942,33 @@ def validate():
         print("Error: %s" % exc)
 
 
+# Validates the user inputs
+def validate_user_input(inputs):
+    print(json.dumps({"flavor": inputs.flavor,
+                      "num_phy_cores_per_numa_node_for_pmd": int(inputs.num_phy_cores_per_numa_node_for_pmd),
+                      "huge_page_allocation_percentage":int( inputs.huge_page_allocation_percentage)}))
+    if not inputs.flavor:
+        raise Exception("Flavor is missing in user input!");
+
+
 # Gets the user input as dictionary.
-def get_args(argv):
-    args = {}
-    while argv:
-        if argv[0].startswith('--'):
-            if len(argv) == 1 or argv[1].startswith('--'):
-                raise Exception("Unable to validate post deployment parameters, user "
-                                "inputs format is invalid.")
-            else:
-                args[argv[0].strip('- ')] = argv[1].strip(' ')
-        argv = argv[1:] 
-    return args
+def parse_opts(argv):
+    parser = argparse.ArgumentParser(
+        description='Interactive tool')
+    parser.add_argument('-f', '--flavor',
+                        metavar='FLAVOR NAME',
+                        help="""flavor name.""",
+                        default='')
+    parser.add_argument('-n', '--num_phy_cores_per_numa_node_for_pmd',
+                        metavar='NUMBER OF PHYSICAL CORES PER NUMA FOR PMD',
+                        help="""number of physical cores per numa node for pmd.""",
+                        default=1)
+    parser.add_argument('-m', '--huge_page_allocation_percentage',
+                        metavar='HUGEPAGE ALLOCATION PERCENTAGE',
+                        help="""hugepage allocation percentage""",
+                        default=50)
+    opts = parser.parse_args(argv[1:])
+    return opts
 
 
 if __name__ == '__main__':
