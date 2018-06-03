@@ -2,7 +2,7 @@
 
 Python scripts 'validate-sriov-params.py' is used to debug and validate the
 SRIOV parameters applied on the environment automatically based on user inputs
-flavor and huge_page_allocation_percentage in post deployment.
+role_name and huge_page_allocation_percentage in post deployment.
 
 Deployed value is validated for each SRIOV parameters and displays
 the differences and helps to identify the parameters related issues.
@@ -41,11 +41,6 @@ ComputeKernelArgs
   ``` 
 * Capture the list of roles with associated node uuid which are using SRIOV
   feature to validate the SRIOV parameters.
-  Find flavor name referring the property Overcloud[RoleName]Flavor value in
-  network-environment.yaml file for any role.
-  ```
-  OvercloudControlFlavor: control
-  OvercloudComputeSriovFlavor: computesriov
   ```
 
 ## Parameters Recommended Value
@@ -55,10 +50,9 @@ Based on the environment, operator can update the recommended value to validate.
 
 ## User Inputs
 
-#### flavor:                                                                    
-This input parameter specifies the flavor name associated to the role to        
-identify the first baremetal node and helps to derive and gets deployed
-SRIOV parameters.
+#### role_name:                                                                    
+This input parameter specifies the role name to identify the first
+baremetal node and helps to validate and gets deployed SRIOV parameters.
 
 #### huge_page_allocation_percentage:
 This input parameter specifies the required percentage of total memory
@@ -70,15 +64,15 @@ set to 50.
 ## Usage
 
 ```
-$ python validate_sriov_params.py user_inputs.json --flavor "flavor name" --huge_page_allocation_percentage 50
+$ python validate_sriov_params.py user_inputs.json --role_name "role name" --huge_page_allocation_percentage 50
 ```
 
 ## Example
 
 ```
-$ python validate_sriov_params.py --flavor "computesriov" --huge_page_allocation_percentage 50
+$ python validate_sriov_params.py --role_name "ComputeSriov" --huge_page_allocation_percentage 50
 Validating user inputs..
-{"flavor": "computesriov", "huge_page_allocation_percentage": "50"}
+{"huge_page_allocation_percentage": "50", "role_name": "ComputeSriov"}
 Collects the deployed value for parameters from node: 172.18.0.31
 Collects the hiera value for parameters from node: 172.18.0.31
 
@@ -147,3 +141,6 @@ Collects the hiera value for parameters from node: 172.18.0.31
 |                        |                        |                   |                                                               |
 +------------------------+------------------------+-------------------+---------------------------------------------------------------+
 ```
+## Note                                                                       
+                                                                         
+No introspection process limitation 

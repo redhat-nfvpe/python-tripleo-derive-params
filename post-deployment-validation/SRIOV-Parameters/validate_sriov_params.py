@@ -41,6 +41,20 @@ def get_node_uuid(flavor_name):
     return node_uuid.strip()
 
 
+# Gets the flavor name for role name
+def get_flavor_name(role_name):
+    flavor = ''
+    param_key = 'Overcloud' + role_name + 'Flavor'
+    cmd = "mistral run-action tripleo.parameters.get"
+    output = subprocess.check_output(cmd,shell=True)
+    result = json.loads(output)
+    if result and result.get('result', {}):
+        env = result.get('result', {}).get('mistral_environment_parameters', {})
+        if env:
+            flavor_name = env.get(param_key, '')
+    return flavor_name
+
+
 # Gets the physical and logical cpus info for all numa nodes.
 def get_nodes_cores_info(client):
     dict_cpus = {}
@@ -427,7 +441,7 @@ def validate_nova_reserved_host_memory(nova_reserved_host_mem_env):
 
 # Validation for nova cpus
 def validate_nova_cpus(dict_cpus, nova_cpus_env, host_cpus, numa_nodes):
-    msg = 'valid.\n'
+    msg = ''
     nova_cores = []
     nova_cpus = convert_range_to_number_list(nova_cpus_env)
     host_cpus = host_cpus.strip('\"\' ').split(',')
@@ -454,12 +468,14 @@ def validate_nova_cpus(dict_cpus, nova_cpus_env, host_cpus, numa_nodes):
                     core_count += 1
             if core_count == 0:
                 msg += 'Missing physical cores for NUMA node: \'' + str(node) + '\' in nova cpus.\n'
+    if not msg:
+        msg = 'valid.\n'
     return msg
 
 
 # Validation for host isolated cpus
 def validate_isol_cpus(dict_cpus, isol_cpus_env, host_cpus, numa_nodes):
-    msg = 'valid.\n'
+    msg = ''
     isol_cores = []
     isol_cpus = convert_range_to_number_list(isol_cpus_env)
     host_cpus = host_cpus.strip('\"\' ').split(',')
@@ -486,6 +502,8 @@ def validate_isol_cpus(dict_cpus, isol_cpus_env, host_cpus, numa_nodes):
                     core_count += 1
             if core_count == 0:
                 msg += 'Missing physical cores for NUMA node: \'' + str(node) + '\' in host isolated cpus.\n'
+    if not msg:
+        msg = 'valid.\n'
     return msg
 
 
@@ -568,7 +586,8 @@ def validate():
         print("Validating user inputs..")
         validate_user_input(opts)
         hugepage_alloc_perc = float(opts.huge_page_allocation_percentage)
-        node_uuid = get_node_uuid(opts.flavor)
+        flavor = get_flavor_name(opts.role_name)
+        node_uuid = get_node_uuid(flavor)
         instance_uuid = get_instance_uuid(node_uuid)
         host_ip = get_host_ip(instance_uuid)
         # SSH access
@@ -593,19 +612,19 @@ def validate():
 
 # Validates the user inputs
 def validate_user_input(inputs):
-    print(json.dumps({"flavor": inputs.flavor,
+    print(json.dumps({"role_name": inputs.role_name,
                       "huge_page_allocation_percentage":int( inputs.huge_page_allocation_percentage)}))
-    if not inputs.flavor:
-        raise Exception("Flavor is missing in user input!");
+    if not inputs.role_name:
+        raise Exception("Role name is missing in user input!");
 
 
 # Gets the user input as dictionary.
 def parse_opts(argv):
     parser = argparse.ArgumentParser(
         description='Interactive tool')
-    parser.add_argument('-f', '--flavor',
-                        metavar='FLAVOR NAME',
-                        help="""flavor name.""",
+    parser.add_argument('-r', '--role_name',
+                        metavar='ROLE NAME',
+                        help="""role name.""",
                         default='')
     parser.add_argument('-m', '--huge_page_allocation_percentage',
                         metavar='HUGEPAGE ALLOCATION PERCENTAGE',

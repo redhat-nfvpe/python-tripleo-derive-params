@@ -2,7 +2,7 @@
 
 Python scripts 'validate-dpdk-params.py' is used to debug and validate the
 DPDK parameters applied on the environment automatically based on user inputs
-flavor name, num_phy_cores_per_numa_node_for_pmd and
+role_name, num_phy_cores_per_numa_node_for_pmd and
 huge_page_allocation_percentage in post deployment.
 
 Deployed value is validated for each DPDK parameters and displays
@@ -14,7 +14,7 @@ flavor and other inputs.
 
 The following is the list of parameters can be validated for the DPDK features
 on the deployed environment based on first baremetal node which is matching
-the provided flavor.
+the provided role name.
 
 ```
 NeutronDpdkCoreList
@@ -47,12 +47,6 @@ tuned
   ``` 
 * Capture the list of roles with associated node uuid which are using OVS-DPDK
   feature to derive the DPDK parameters.
-  Find flavor name referring the property Overcloud[RoleName]Flavor value in
-  network-environment.yaml file for any role.
-  ```
-  OvercloudControlFlavor: control
-  OvercloudComputeOvsDpdkFlavor: computeovsdpdk
-  ```
 
 ## Parameters Recommended Value
 * NovaReservedHostMemory parameter is 4096.
@@ -62,10 +56,9 @@ Based on the environment, operator can update the recommended value to validate.
 
 ## User Inputs
 
-#### flavor:                                                                    
-This input parameter specifies the flavor name associated to the role to        
-identify the first baremetal node and helps to derive and gets deployed
-DPDK parameters.
+#### role_name:                                                                    
+This input parameter specifies the role name to identify the first
+baremetal node and helps to derive and gets deployed DPDK parameters.
 
 #### num_phy_cores_per_numa_node_for_pmd:
 This input parameter specifies the required minimum number of cores for
@@ -83,16 +76,16 @@ set to 50.
 ## Usage
 
 ```
-$ python validate_dpdk_params.py --flavor "flavor name" --num_phy_cores_per_numa_node_for_pmd 1 --huge_page_allocation_percentage 50
+$ python validate_dpdk_params.py --role_name "role name" --num_phy_cores_per_numa_node_for_pmd 1 --huge_page_allocation_percentage 50
 
 ```
 
 ## Example
 
 ```
-$ python validate_dpdk_params.py --flavor "computeovsdpdk" --num_phy_cores_per_numa_node_for_pmd 1 --huge_page_allocation_percentage 50
+$ python validate_dpdk_params.py --role_name "ComputeOvsDpdk" --num_phy_cores_per_numa_node_for_pmd 1 --huge_page_allocation_percentage 50
 Validating user inputs..
-{"flavor": "computeovsdpdk", "huge_page_allocation_percentage": "50", "num_phy_cores_per_numa_node_for_pmd": "1"}
+{"huge_page_allocation_percentage": "50", "role_name": "ComputeOvsDpdk", "num_phy_cores_per_numa_node_for_pmd": "1"}
 Collects the deployed value for parameters from node: 172.18.0.31
 Collects the hiera value for parameters from node: 172.18.0.31
 DPDK NIC's and NUMA node mapping:
@@ -187,3 +180,5 @@ NIC "p1p1": NUMA node 1, Physical CPU's: [1, 3, 5, 7, 9, 11, 13, 15, 17, 19, 21,
 
 This python scripts can also be used to validate the parameters automatically
 when any role uses both DPDK and SRIOV features.
+
+No introspection process limitation
