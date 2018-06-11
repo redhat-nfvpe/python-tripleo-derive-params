@@ -43,13 +43,15 @@ def get_node_uuid(flavor_name):
 
 # Gets the flavor name for role name
 def get_flavor_name(role_name):
-    flavor = ''
+    flavor_name = ''
     param_key = 'Overcloud' + role_name + 'Flavor'
     cmd = "mistral run-action tripleo.parameters.get"
     output = subprocess.check_output(cmd,shell=True)
     result = json.loads(output)
     if result and result.get('result', {}):
         env = result.get('result', {}).get('mistral_environment_parameters', {})
+        if not env:
+            env = result.get('result', {}).get('environment_parameters', {})
         if env:
             flavor_name = env.get(param_key, '')
     return flavor_name
@@ -487,7 +489,10 @@ def get_nova_cpus_from_hiera(client, containers_based_dep):
         hiera_json = json.loads(str(stdout.read()))
         nova_cpus = hiera_json["nova::compute::vcpu_pin_set"]
         if nova_cpus:
-            nova_cpus = "\'" + nova_cpus + "\'"
+            if isinstance(nova_cpus, str):
+                nova_cpus = str(nova_cpus)
+            else:
+                nova_cpus = str([str(nova_cpu) for nova_cpu in nova_cpus])
     else:
         cmd = 'sudo cat /etc/puppet/hieradata/service_configs.yaml | grep -v ^#'
         stdin, stdout, stderr = client.exec_command(cmd)
@@ -535,7 +540,7 @@ def get_dpdk_mem_channels_from_hiera(client, containers_based_dep):
         hiera_json = json.loads(str(stdout.read()))
         dpdk_mem_channels = hiera_json["vswitch::dpdk::memory_channels"]
         if dpdk_mem_channels:
-            dpdk_mem_channels = "\'" + dpdk_mem_channels + "\'"
+            dpdk_mem_channels =  dpdk_mem_channels
     else:
         cmd = 'sudo cat /etc/puppet/hieradata/service_configs.yaml | grep "vswitch::dpdk::memory_channels" | grep -v ^#'
         stdin, stdout, stderr = client.exec_command(cmd)
@@ -809,6 +814,10 @@ def validate_nova_cpus(dict_cpus, nova_cpus_env, dpdk_cpus_env, host_cpus, numa_
 def validate_isol_cpus(dict_cpus, isol_cpus_env, host_cpus, numa_nodes):
     msg = ''
     isol_cores = []
+    if not isol_cpus_env.strip('"\''):
+        msg = 'Missing host isolated cpus.\n'
+        return msg
+
     isol_cpus = convert_range_to_number_list(isol_cpus_env)
     host_cpus = host_cpus.strip('\"\' ').split(',')
     dup_host_cpus = []
